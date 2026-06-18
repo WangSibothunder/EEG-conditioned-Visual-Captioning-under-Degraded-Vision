@@ -1,0 +1,18 @@
+[
+  {
+    "experiment_id": "P1_spectrogram_smoke",
+    "config": "P1_spectrogram_smoke.yaml"
+  },
+  {
+    "experiment_id": "P2_raw_spectrogram_smoke",
+    "config": "P2_raw_spectrogram_smoke.yaml"
+  },
+  {
+    "experiment_id": "T4_stage2_seed42",
+    "config": "T4_stage2_seed42.yaml"
+  },
+  {
+    "experiment_id": "S1_stage2_seed42",
+    "config": "S1_stage2_seed42.yaml"
+  }
+]

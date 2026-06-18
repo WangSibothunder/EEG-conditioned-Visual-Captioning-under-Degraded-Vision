@@ -1,0 +1,26 @@
+[
+  {
+    "config": "E3_S1_lr3e5_seed777.yaml",
+    "experiment_id": "E3_S1_lr3e5_seed777"
+  },
+  {
+    "config": "E3_S1_dropout03_seed777.yaml",
+    "experiment_id": "E3_S1_dropout03_seed777"
+  },
+  {
+    "config": "E3_S3_lr3e5_seed777.yaml",
+    "experiment_id": "E3_S3_lr3e5_seed777"
+  },
+  {
+    "config": "E3_S5_lr3e5_seed777.yaml",
+    "experiment_id": "E3_S5_lr3e5_seed777"
+  },
+  {
+    "config": "E4_G2_lr3e5_seed777.yaml",
+    "experiment_id": "E4_G2_lr3e5_seed777"
+  },
+  {
+    "config": "E4_G2_dropout035_seed777.yaml",
+    "experiment_id": "E4_G2_dropout035_seed777"
+  }
+]

@@ -1,0 +1,33 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.env
+.env.*
+!.env.example
+auth.json
+*.key
+*.pem
+
+data/
+outputs/
+checkpoints/
+wandb/
+runs/
+*.log
+
+# Large generated artifacts should be added deliberately under artifacts/.
+*.ckpt
+*.pth
+*.npy
+*.npz
+*.mmap
+*.zip
+*.tar
+*.tar.gz
+
+# Keep trainable EVLM adapters that are intentionally archived.
+!artifacts/**/*.pt
+!artifacts/**/*.safetensors

@@ -1,0 +1,10 @@
+[
+  {
+    "experiment_id": "E5_no_L7_control",
+    "config": "E5_no_L7_control.yaml"
+  },
+  {
+    "experiment_id": "E5_with_L7_recheck",
+    "config": "E5_with_L7_recheck.yaml"
+  }
+]

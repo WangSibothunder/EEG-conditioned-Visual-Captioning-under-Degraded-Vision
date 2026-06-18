@@ -1,0 +1,22 @@
+[
+  {
+    "experiment_id": "P2_raw_spectrogram_seed314_fill8",
+    "config": "P2_raw_spectrogram_seed314_fill8.yaml"
+  },
+  {
+    "experiment_id": "P2_raw_spectrogram_seed2718_fill8",
+    "config": "P2_raw_spectrogram_seed2718_fill8.yaml"
+  },
+  {
+    "experiment_id": "P2_raw_spectrogram_dropout035_fill8",
+    "config": "P2_raw_spectrogram_dropout035_fill8.yaml"
+  },
+  {
+    "experiment_id": "P2_raw_spectrogram_batch160_fill8",
+    "config": "P2_raw_spectrogram_batch160_fill8.yaml"
+  },
+  {
+    "experiment_id": "P2_raw_spectrogram_lr3e5_fill8",
+    "config": "P2_raw_spectrogram_lr3e5_fill8.yaml"
+  }
+]

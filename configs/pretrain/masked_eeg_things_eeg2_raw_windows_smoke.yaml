@@ -1,0 +1,37 @@
+experiment_id: masked_eeg_things_eeg2_raw_windows_smoke
+seed: 42
+device: auto
+data:
+  name: THINGS-EEG2 raw continuous EEG windows smoke
+  train_eeg_cache: /cloud/cloud-ssd1/eeg_vision_caption_data/THINGS-EEG2/derived/raw_window_cache_smoke/things_eeg2_train_windows.npy
+  val_eeg_cache: /cloud/cloud-ssd1/eeg_vision_caption_data/THINGS-EEG2/derived/raw_window_cache_smoke/things_eeg2_val_windows.npy
+  eeg_channels: 64
+  eeg_timesteps: 250
+  force_rebuild_cache: false
+model:
+  name: MaskedEEGAutoencoder
+  hidden_dim: 256
+  layers: 2
+  heads: 8
+  ffn_dim: 1024
+  spatial_layers: 1
+  dropout: 0.1
+train:
+  epochs: 2
+  batch_size: 128
+  grad_accum_steps: 1
+  lr: 0.0001
+  weight_decay: 0.05
+  bf16: true
+  num_workers: 0
+  patience: 0
+  mask_ratio_time: 0.35
+  mask_ratio_channel: 0.15
+  mask_span: 12
+  lambda_spectral: 0.2
+  lambda_smoothness: 0.1
+  log_every: 5
+  max_train_samples: 512
+  max_val_samples: 256
+output:
+  dir: outputs/pretrain/masked_eeg_things_eeg2_raw_windows_smoke

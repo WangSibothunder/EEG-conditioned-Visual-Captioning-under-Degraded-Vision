@@ -1,0 +1,365 @@
+# Heavy-stage queue for scripts/heavy_stage_scheduler.py.
+# Default mode records status and recommendations only.
+# Use `python scripts/heavy_stage_scheduler.py --launch-when-idle` to launch the
+# next queued command only when the recent GPU idle diagnosis triggers.
+jobs:
+  - id: DATASET_THINGS_EEG2_READY
+    priority: 10
+    status: blocked
+    command: "python scripts/build_things_eeg2_manifest.py --root /cloud/cloud-ssd1/eeg_vision_caption_data/THINGS-EEG2"
+    expected_output: "outputs/datasets/THINGS_EEG2_READY_REPORT.md"
+    notes: "THINGS-EEG2 raw repo is verified and image_set is extracted, but no trial/event stimulus-order metadata was found. It is still blocked for image+EEG trial-level manifests. Raw continuous EEG is being used separately for masked EEG pretraining via fixed windows."
+  - id: DATASET_EIT1M_READY
+    priority: 20
+    status: blocked
+    command: "python scripts/build_eit1m_manifest.py --root /cloud/cloud-ssd1/eeg_vision_caption_data/EIT-1M"
+    expected_output: "outputs/datasets/EIT1M_READY_REPORT.md"
+    notes: "Public HF release is partial and only useful for pilot/metadata smoke, not full tri-modal training."
+  - id: DATASET_EEG_IMAGENET_READY
+    priority: 25
+    status: completed
+    command: "python scripts/build_eeg_imagenet_manifest.py --root /cloud/cloud-ssd1/eeg_vision_caption_data/EEG-ImageNet/extracted --out data/EEG-ImageNet/small_manifest.jsonl --report outputs/datasets/EEG_IMAGENET_READY_REPORT.md"
+    expected_output: "outputs/datasets/EEG_IMAGENET_READY_REPORT.md"
+    notes: "EEG-ImageNet extraction and JSONL conversion are complete. Full EEG-only train/val/test manifests exist and are valid for EEG-only pretraining. ImageNet CLS-LOC is downloaded/extracted; paired image+EEG training uses only exact-linked subset manifests because some exact stimulus JPEGs are absent from Kaggle CLS-LOC."
+  - id: DATASET_EEG_IMAGENET_IMAGE_LINK
+    priority: 26
+    status: partial_ready
+    command: "python scripts/watch_and_link_eeg_imagenet_images.py --run --poll-seconds 30 --max-wait-seconds -1"
+    expected_output: "data/EEG-ImageNet/train_image_exact.jsonl"
+    notes: "Watcher should run in tmux session eeg_imagenet_image_link. It waits for ImageNet Kaggle CLS-LOC zip completion, validation, outer extraction marker, nested extraction marker, and JPEG availability, then links train/val/test EEG-ImageNet manifests to real image paths. Because Kaggle CLS-LOC lacks some exact original EEG-ImageNet stimuli, paired training uses only exact-linked subset manifests and never same-class replacement images."
+  - id: MASKED_EEG_PRETRAIN_HEAVY
+    priority: 30
+    status: completed
+    command: "bash scripts/run_masked_eeg_pretrain.sh"
+    expected_output: "outputs/pretrain/MASKED_EEG_PRETRAIN_REPORT.md"
+    notes: "Running on Thought2Text fallback while larger datasets are not loader-ready."
+  - id: TRIMODAL_CONTRASTIVE_FULL
+    priority: 40
+    status: completed
+    command: "bash scripts/run_trimodal_align.sh configs/trimodal/full_masked_pretrained.yaml outputs/trimodal/full_masked_pretrained"
+    expected_output: "outputs/trimodal/TRIMODAL_FULL_REPORT.md"
+    notes: "Full Thought2Text tri-modal job resumed from last.pt with num_workers=0 after cgroup kill from per-worker .pth cache duplication; not smoke."
+  - id: TRANSFER_THOUGHT2TEXT
+    priority: 50
+    status: completed
+    command: "bash scripts/run_masked_pretrain_transfer.sh"
+    expected_output: "outputs/transfer/masked_pretrain_t2t_align/checkpoints/best.pt"
+    notes: "Transfer masked-pretrained encoder resumed from last.pt with num_workers=0 and EEG memmap cache; compare against Day4/Day5 baselines."
+  - id: CLIP_ADAPTER_THOUGHT2TEXT
+    priority: 60
+    status: completed
+    command: "bash scripts/run_clip_adapter.sh configs/clip_adapter/thought2text_adapter.yaml outputs/clip_adapter/thought2text_adapter"
+    expected_output: "outputs/clip_adapter/CLIP_ADAPTER_REPORT.md"
+    notes: "Neural-aware CLIP adapter/cached-embedding calibration job; launch after implementation smoke passes or if GPU has safe spare memory."
+  - id: TRANSFER_EEG_IMAGENET_PRETRAIN_TO_THOUGHT2TEXT
+    priority: 70
+    status: completed
+    command: "bash scripts/run_align.sh --config configs/recovery/eeg_imagenet_pretrain_t2t_align_recovery.yaml --output_dir outputs/transfer/eeg_imagenet_pretrain_t2t_align --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/transfer/eeg_imagenet_pretrain_t2t_align/checkpoints/best.pt"
+    notes: "Original process was killed at epoch 23 under high host-memory pressure while many DataLoader workers from concurrent jobs were active. A num_workers=0 recovery also was killed around epoch 27 while worker-heavy stage2 jobs were still active. Host RAM later recovered after multiple stage2 jobs completed; recovery is being restarted from last.pt with num_workers=0."
+  - id: ROBUST_SEMANTIC_EVAL_AFTER_EEG_IMAGENET_TRANSFER
+    priority: 80
+    status: completed
+    command: "python scripts/launch_semantic_eval_after_transfer.py --background"
+    expected_output: "outputs/final_semantic/eeg_imagenet_transfer_eval/FULL_METRICS.csv"
+    notes: "tmux semantic_transfer_eval is active. It now waits for outputs/transfer/eeg_imagenet_pretrain_t2t_align/alignment_metrics.json before evaluating, so premature best.pt snapshots are not treated as final."
+  - id: MASKED_EEG_PRETRAIN_EEG_IMAGENET
+    priority: 35
+    status: completed
+    command: "bash scripts/run_masked_eeg_pretrain.sh configs/pretrain/masked_eeg_eeg_imagenet.yaml"
+    expected_output: "outputs/pretrain/masked_eeg_eeg_imagenet_dualbranch_heavy/MASKED_EEG_PRETRAIN_REPORT.md"
+    notes: "Full EEG-ImageNet EEG-only masked pretraining completed. Best checkpoint is outputs/pretrain/masked_eeg_eeg_imagenet_dualbranch_heavy/checkpoints/best_masked_eeg.pt; image files were not needed for this pretext task."
+  - id: MASKED_EEG_PRETRAIN_THINGS_RAW_WINDOWS
+    priority: 36
+    status: completed
+    command: "MAX_TRAIN_WINDOWS=200000 MAX_VAL_WINDOWS=40000 STRIDE=500 bash scripts/run_things_eeg2_raw_window_pretrain.sh"
+    expected_output: "outputs/pretrain/masked_eeg_things_eeg2_raw_windows/MASKED_EEG_PRETRAIN_REPORT.md"
+    notes: "THINGS-EEG2 raw continuous EEG fixed-window cache build and masked EEG pretraining completed. This is EEG-only pretraining, not image-trial alignment; its Thought2Text transfer completed with unique-image R@5=0.1712 and did not beat the historical best."
+  - id: TRANSFER_THINGS_RAW_PRETRAIN_TO_THOUGHT2TEXT
+    priority: 37
+    status: completed
+    command: "python scripts/launch_transfer_after_pretrain_artifact.py --checkpoint outputs/pretrain/masked_eeg_things_eeg2_raw_windows/checkpoints/best_masked_eeg.pt --report outputs/pretrain/masked_eeg_things_eeg2_raw_windows/MASKED_EEG_PRETRAIN_REPORT.md --config configs/transfer/things_raw_pretrain_t2t_align.yaml --output-dir outputs/transfer/things_raw_pretrain_t2t_align --job-id TRANSFER_THINGS_RAW_PRETRAIN_TO_THOUGHT2TEXT --log outputs/transfer/things_raw_pretrain_t2t_align/launcher.log"
+    expected_output: "outputs/transfer/things_raw_pretrain_t2t_align/alignment_metrics.json"
+    notes: "Thought2Text alignment transfer from THINGS raw-window masked pretraining completed. Final unique-image R@5=0.1712, class_acc=0.1442; useful negative/limited transfer evidence, not promoted over historical best."
+  - id: EEG_IMAGENET_PAIRED_ALIGNMENT_READY_WATCHER
+    priority: 37
+    status: completed
+    command: "python scripts/launch_after_manifest_artifact.py --manifest data/EEG-ImageNet/train_image_exact.jsonl --manifest data/EEG-ImageNet/val_image_exact.jsonl --report outputs/datasets/EEG_IMAGENET_IMAGE_LINK_TRAIN_REPORT.md --report outputs/datasets/EEG_IMAGENET_IMAGE_LINK_VAL_REPORT.md --queue configs/heavy_stage_queue.yaml --job-id EEG_IMAGENET_PAIRED_ALIGNMENT_AFTER_IMAGE_LINK --poll-seconds 30 --max-wait-seconds -1 --log outputs/transfer/eeg_imagenet_paired_alignment/manifest_watcher.log"
+    expected_output: "data/EEG-ImageNet/train_image_exact.jsonl"
+    notes: "CPU watcher should mark EEG_IMAGENET_PAIRED_ALIGNMENT_AFTER_IMAGE_LINK queued after exact-linked train/val subset manifests exist and reports say exact subset is ready. It does not occupy GPU."
+  - id: EEG_IMAGENET_PAIRED_ALIGNMENT_AFTER_IMAGE_LINK
+    priority: 38
+    status: skipped
+    command: "python scripts/precompute_vision.py --manifest data/EEG-ImageNet/train_image_exact.jsonl --out data/EEG-ImageNet/cache/clip_train_image_exact.npy --index_out data/EEG-ImageNet/cache/clip_index_train_image_exact.json --batch_size 128 --eeg_channels 62 --eeg_timesteps 501 --device auto --require_real_model --num_workers 4 --prefetch_factor 4 --report outputs/datasets/EEG_IMAGENET_CLIP_TRAIN_CACHE_REPORT.md && python scripts/precompute_vision.py --manifest data/EEG-ImageNet/val_image_exact.jsonl --out data/EEG-ImageNet/cache/clip_val_image_exact.npy --index_out data/EEG-ImageNet/cache/clip_index_val_image_exact.json --batch_size 128 --eeg_channels 62 --eeg_timesteps 501 --device auto --require_real_model --num_workers 4 --prefetch_factor 4 --report outputs/datasets/EEG_IMAGENET_CLIP_VAL_CACHE_REPORT.md && bash scripts/run_masked_pretrain_transfer.sh configs/transfer/eeg_imagenet_paired_alignment.yaml outputs/transfer/eeg_imagenet_paired_alignment"
+    expected_output: "outputs/transfer/eeg_imagenet_paired_alignment/alignment_metrics.json"
+    notes: "Superseded by EEG_IMAGENET_PAIRED_ALIGNMENT_CACHED_RECOVERY after the original per-file EEG run became CPU/I/O-bound. The cached recovery completed with exact synchronized rows only."
+  - id: TRIMODAL_EEG_IMAGENET_EXACT_FULL
+    priority: 39
+    status: completed
+    command: "python -m src.train.train_trimodal_align --config configs/trimodal/eeg_imagenet_exact_full.yaml"
+    expected_output: "outputs/trimodal/eeg_imagenet_exact_full/TRIMODAL_FULL_REPORT.md"
+    notes: "Full tri-modal EEG-image-text contrastive training on the exact-linked EEG-ImageNet subset completed. Result was near-random and is preserved as a negative result."
+
+  - id: ARCH_A1_DUALBRANCH_EEGCONFORMER_FULL
+    priority: 44
+    status: completed
+    command: "python -m src.train.train_align --config configs/heavy_architectures/A1_dualbranch_eegconformer_full.yaml --output_dir outputs/architectures/A1_dualbranch_eegconformer_full --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/architectures/A1_dualbranch_eegconformer_full/alignment_metrics.json"
+    notes: "Standalone named A1 full Thought2Text alignment completed. Final unique-image R@5=0.2432, class_acc=0.2500; useful negative/weak result, not promotable over P2."
+  - id: ARCH_A2_TEMPORAL_SPECTRAL_SPATIAL_FULL
+    priority: 45
+    status: completed
+    command: "python -m src.train.train_align --config configs/heavy_architectures/A2_temporal_spectral_spatial_full.yaml --output_dir outputs/architectures/A2_temporal_spectral_spatial_full --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/architectures/A2_temporal_spectral_spatial_full/alignment_metrics.json"
+    notes: "Standalone named A2 full Thought2Text alignment completed. Final unique-image R@5=0.2943, class_acc=0.2954; best A-series run but not promotable over P2."
+  - id: ARCH_A3_SUBJECT_ADAPTIVE_GRAPH_FULL
+    priority: 46
+    status: completed
+    command: "python -m src.train.train_align --config configs/heavy_architectures/A3_subject_adaptive_graph_full.yaml --output_dir outputs/architectures/A3_subject_adaptive_graph_full --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/architectures/A3_subject_adaptive_graph_full/alignment_metrics.json"
+    notes: "Standalone named A3 full Thought2Text alignment completed. Final unique-image R@5=0.0300, class_acc=0.0424; negative result despite subject graph and L7/supcon."
+  - id: TRIMODAL_CONTRASTIVE_FULL_SEED123
+    priority: 47
+    status: completed
+    command: "python -m src.train.train_trimodal_align --config configs/trimodal/full_masked_pretrained_seed123.yaml"
+    expected_output: "outputs/trimodal/full_masked_pretrained_seed123/trimodal_metrics.json"
+    notes: "Full tri-modal EEG-image-text contrastive seed 123. Complements completed seed 42 and is not a smoke test."
+  - id: TRIMODAL_CONTRASTIVE_FULL_SEED2025
+    priority: 48
+    status: completed
+    command: "python -m src.train.train_trimodal_align --config configs/trimodal/full_masked_pretrained_seed2025.yaml"
+    expected_output: "outputs/trimodal/full_masked_pretrained_seed2025/trimodal_metrics.json"
+    notes: "Full tri-modal EEG-image-text contrastive seed 2025. Completes the requested 42/123/2025 multi-seed set if it finishes."
+  - id: SEMANTIC_FUSION_CLASSIFIER_STRONG_EVAL
+    priority: 49
+    status: completed
+    command: "python -m src.eval.semantic_fusion_classifier_eval --classifier_checkpoint outputs/heavy_stage/semantic_fusion_best_encoder_full/semantic_fusion_classifier.pt --prototype_bank outputs/semantic_caption/prototypes.pt --manifest data/thought2text/test_human_caption.jsonl --cache_dir data/thought2text/cache --output_dir outputs/final_semantic/semantic_fusion_classifier_strong_eval --corruptions clean strong_blur strong_noise occlusion50 lowres16 mixed --modes vision_only real_eeg shuffled_eeg random_eeg eeg_only --eeg_checkpoint outputs/architectures/checkpoints/best_encoder.pt --batch_size 128 --device auto"
+    expected_output: "outputs/final_semantic/semantic_fusion_classifier_strong_eval/FULL_METRICS.csv"
+    notes: "Full strong-degradation evaluator for the trained semantic_fusion_classifier.pt. Queued until current A-series/tri-modal full runs free a safe GPU slot."
+  - id: SEMANTIC_FUSION_CLASSIFIER_SEED123_CONTROLLED
+    priority: 50
+    status: completed
+    command: "python -m src.train.train_semantic_fusion --seed 123 --train_manifest data/thought2text/train_human_caption.jsonl --val_manifest data/thought2text/val_human_caption.jsonl --train_cache data/thought2text/cache/clip_train.npy --val_cache data/thought2text/cache/clip_val.npy --train_index data/thought2text/cache/clip_index_train.json --val_index data/thought2text/cache/clip_index_val.json --eeg_checkpoint outputs/architectures/checkpoints/best_encoder.pt --output_dir outputs/heavy_stage/semantic_fusion_best_encoder_seed123_controlled --epochs 80 --batch_size 512 --hidden_dim 1024 --lr 0.001 --weight_decay 0.01 --num_workers 0 --log_every 20"
+    expected_output: "outputs/heavy_stage/semantic_fusion_best_encoder_seed123_controlled/semantic_fusion_classifier.pt"
+    notes: "Seed-controlled full semantic fusion classifier run completed for downstream variance analysis. This supersedes earlier repeat runs that lacked explicit seed control."
+  - id: SEMANTIC_FUSION_CLASSIFIER_SEED2025_CONTROLLED
+    priority: 51
+    status: completed
+    command: "python -m src.train.train_semantic_fusion --seed 2025 --train_manifest data/thought2text/train_human_caption.jsonl --val_manifest data/thought2text/val_human_caption.jsonl --train_cache data/thought2text/cache/clip_train.npy --val_cache data/thought2text/cache/clip_val.npy --train_index data/thought2text/cache/clip_index_train.json --val_index data/thought2text/cache/clip_index_val.json --eeg_checkpoint outputs/architectures/checkpoints/best_encoder.pt --output_dir outputs/heavy_stage/semantic_fusion_best_encoder_seed2025_controlled --epochs 80 --batch_size 512 --hidden_dim 1024 --lr 0.001 --weight_decay 0.01 --num_workers 0 --log_every 20"
+    expected_output: "outputs/heavy_stage/semantic_fusion_best_encoder_seed2025_controlled/semantic_fusion_classifier.pt"
+    notes: "Seed-controlled full semantic fusion classifier run completed for downstream variance analysis. This supersedes earlier repeat runs that lacked explicit seed control."
+
+  - id: FALLBACK_CLIPL_DEGRADED_TEST_CACHE
+    priority: 39
+    status: completed
+    command: "python scripts/precompute_degraded_vision.py --manifest data/thought2text/test.jsonl --out_dir data/thought2text/cache/degraded_test_clipL --model_name openai/clip-vit-large-patch14 --batch_size 64 --num_workers 0 --device auto --require_real_model --report outputs/day5_clipL/degraded_clipL_test_cache_report.md"
+    expected_output: "data/thought2text/cache/degraded_test_clipL/clip_test_clean.npy"
+    notes: "GPU idle fallback. Complements existing CLIP-L clean caches and CLIP-B degraded caches with degraded CLIP-L features for stronger vision-backbone robustness analysis. Running with num_workers=0 after worker-backed background launch exited without logs; clean corruption is already cached and remaining corruptions are launched separately."
+  - id: FALLBACK_STRONG_DEGRADATION_SEMANTIC_EVAL
+    priority: 40
+    status: completed
+    command: "python scripts/precompute_degraded_vision.py --manifest data/thought2text/test_human_caption.jsonl --out_dir data/thought2text/cache/degraded_test --corruptions strong_blur strong_noise occlusion50 lowres16 mixed --model_name openai/clip-vit-base-patch32 --batch_size 64 --device auto --require_real_model --report outputs/final_semantic/strong_degradation_cache_report.md && python -m src.eval.constrained_caption_eval --prototype_bank outputs/semantic_caption/prototypes.pt --manifest data/thought2text/test_human_caption.jsonl --cache_dir data/thought2text/cache --output_dir outputs/final_semantic/strong_degradation_eval --corruptions strong_blur strong_noise occlusion50 lowres16 mixed --modes vision_only real_eeg shuffled_eeg random_eeg eeg_only --eeg_checkpoint outputs/architectures/checkpoints/best_encoder.pt --batch_size 64 --device auto && python scripts/make_semantic_caption_report.py --metrics outputs/final_semantic/strong_degradation_eval/FULL_METRICS.csv --output_dir outputs/final_semantic/strong_degradation_eval && python scripts/make_robustness_report.py --day5_csv outputs/final_semantic/strong_degradation_eval/FULL_METRICS.csv --semantic_dir outputs/final_semantic/strong_degradation_eval --out_dir outputs/robustness/strong_degradation_eval"
+    expected_output: "outputs/final_semantic/strong_degradation_eval/FULL_METRICS.csv"
+    notes: "GPU idle fallback for the heavy-stage strong degradation requirement. Uses new strong_blur/strong_noise/occlusion50/lowres16/mixed corruptions and all semantic control modes."
+  - id: FALLBACK_EEG_IMAGENET_TRANSFER_SEMANTIC_FUSION
+    priority: 42
+    status: completed
+    command: "bash -lc 'while [ ! -f outputs/transfer/eeg_imagenet_pretrain_t2t_align/alignment_metrics.json ]; do sleep 300; done; python -m src.train.train_semantic_fusion --train_manifest data/thought2text/train_human_caption.jsonl --val_manifest data/thought2text/val_human_caption.jsonl --train_cache data/thought2text/cache/clip_train.npy --val_cache data/thought2text/cache/clip_val.npy --train_index data/thought2text/cache/clip_index_train.json --val_index data/thought2text/cache/clip_index_val.json --eeg_checkpoint outputs/transfer/eeg_imagenet_pretrain_t2t_align/checkpoints/best.pt --output_dir outputs/semantic_caption/eeg_imagenet_transfer_fusion_classifier --epochs 10 --batch_size 128 --num_workers 0'"
+    expected_output: "outputs/semantic_caption/eeg_imagenet_transfer_fusion_classifier/semantic_fusion_classifier.pt"
+    notes: "GPU idle fallback after EEG-ImageNet transfer recovery. Tests whether the transferred encoder improves a constrained semantic classifier; waits for final alignment_metrics.json, not partial best.pt."
+  - id: DAY6_G2_RECHECK_ALIGNMENT
+    priority: 82
+    status: completed
+    command: "bash scripts/run_align.sh --config configs/day6_alignment_stage2/G2_recheck.yaml --output_dir outputs/day6_alignment_stage2/G2_recheck --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/day6_alignment_stage2/G2_recheck/alignment_metrics.json"
+    notes: "Completed. Unique-image R@5=0.2853 and class_acc=0.3067; useful strong-model recheck but not above the previous best."
+  - id: DAY6_X2_SUBJECT_ALIGNMENT
+    priority: 83
+    status: completed
+    command: "bash scripts/run_align.sh --config configs/day6_alignment_stage2/X2_stage2.yaml --output_dir outputs/day6_alignment_stage2/X2_stage2 --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/day6_alignment_stage2/X2_stage2/alignment_metrics.json"
+    notes: "Completed. Unique-image R@5=0.2523 and class_acc=0.2479; subject/same-image setting did not beat stronger baselines in this run."
+  - id: DAY6_S3_STAGE2_ALIGNMENT
+    priority: 84
+    status: completed
+    command: "bash scripts/run_align.sh --config configs/day6_alignment_stage2/S3_stage2.yaml --output_dir outputs/day6_alignment_stage2/S3_stage2 --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/day6_alignment_stage2/S3_stage2/alignment_metrics.json"
+    notes: "Completed. Unique-image R@5=0.2733 and class_acc=0.2582; similarity distillation run did not beat the historical best."
+  - id: DAY6_S1_STAGE2_ALIGNMENT
+    priority: 85
+    status: completed
+    command: "bash scripts/run_align.sh --config configs/recovery/S1_stage2_recovery.yaml --output_dir outputs/day6_alignment_stage2/S1_stage2 --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/day6_alignment_stage2/S1_stage2/alignment_metrics.json"
+    notes: "Completed after num_workers=0 recovery. Unique-image R@5=0.2553, R@1=0.0811, R@10=0.4384, class_acc=0.2613; did not beat the historical best."
+  - id: DAY6_T4_STAGE2_ALIGNMENT
+    priority: 86
+    status: completed
+    command: "bash scripts/run_align.sh --config configs/day6_alignment_stage2/T4_stage2.yaml --output_dir outputs/day6_alignment_stage2/T4_stage2 --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/day6_alignment_stage2/T4_stage2/alignment_metrics.json"
+    notes: "Completed. Unique-image R@5=0.2583, R@1=0.0631, R@10=0.4444, class_acc=0.2567. This rerun did not beat the previous best."
+  - id: DAY6_S1_STAGE2_SEED123_ALIGNMENT
+    priority: 87
+    status: completed
+    command: "bash scripts/run_align.sh --config configs/recovery/S1_stage2_seed123_recovery.yaml --output_dir outputs/day6_alignment_stage2/S1_stage2_seed123 --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/day6_alignment_stage2/S1_stage2_seed123/alignment_metrics.json"
+    notes: "Completed after num_workers=0 recovery. Unique-image R@5=0.2853, R@1=0.0571, R@10=0.4805, class_acc=0.2579; did not beat the historical best."
+  - id: DAY6_T4_STAGE2_SEED123_ALIGNMENT
+    priority: 88
+    status: completed
+    command: "bash scripts/run_align.sh --config configs/day6_alignment_stage2/T4_stage2_seed123.yaml --output_dir outputs/day6_alignment_stage2/T4_stage2_seed123 --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/day6_alignment_stage2/T4_stage2_seed123/alignment_metrics.json"
+    notes: "Completed. Unique-image R@5=0.2853, R@1=0.0541, R@10=0.4865, class_acc=0.2365."
+  - id: DAY6_S1_STAGE2_SEED2025_ALIGNMENT
+    priority: 89
+    status: completed
+    command: "bash scripts/run_align.sh --config configs/day6_alignment_stage2/S1_stage2_seed2025.yaml --output_dir outputs/day6_alignment_stage2/S1_stage2_seed2025 --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/day6_alignment_stage2/S1_stage2_seed2025/alignment_metrics.json"
+    notes: "Completed. Unique-image R@5=0.2372, R@1=0.0360, R@10=0.4474, class_acc=0.2754."
+  - id: DAY6_T4_STAGE2_SEED2025_ALIGNMENT
+    priority: 90
+    status: completed
+    command: "bash scripts/run_align.sh --config configs/day6_alignment_stage2/T4_stage2_seed2025.yaml --output_dir outputs/day6_alignment_stage2/T4_stage2_seed2025 --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/day6_alignment_stage2/T4_stage2_seed2025/alignment_metrics.json"
+    notes: "Completed. Unique-image R@5=0.2763, R@1=0.0360, R@10=0.4565, class_acc=0.2674."
+
+  - id: EEG_IMAGENET_PAIRED_ALIGNMENT_CACHED_RECOVERY
+    priority: 38
+    status: completed
+    command: "python -m src.train.train_align --config configs/transfer/eeg_imagenet_paired_alignment_cached.yaml --output_dir outputs/transfer/eeg_imagenet_paired_alignment_cached --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/transfer/eeg_imagenet_paired_alignment_cached/alignment_metrics.json"
+    notes: "Cache-backed recovery/full run for exact-linked EEG-ImageNet paired alignment. Launched because the original per-file EEG run was CPU/I/O-bound and stopped writing training logs after step 150 while keeping a process alive. Uses exact synchronized rows only and prebuilt eeg_train/eeg_val memmap caches."
+
+  - id: ARCH_A2_TEMPORAL_SPECTRAL_SPATIAL_SEED6161_FULL
+    priority: 52
+    status: completed
+    command: "python -m src.train.train_align --config configs/heavy_architectures/A2_temporal_spectral_spatial_seed6161_full.yaml --output_dir outputs/architectures/A2_temporal_spectral_spatial_seed6161_full --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/architectures/A2_temporal_spectral_spatial_seed6161_full/alignment_metrics.json"
+    notes: "A2 stability rerun completed. Final unique-image R@5=0.2853 and class_acc=0.2673; below P2 and not promoted."
+  - id: SEMANTIC_FUSION_A2_FULL
+    priority: 53
+    status: completed
+    command: "python -m src.train.train_semantic_fusion --seed 42 --train_manifest data/thought2text/train_human_caption.jsonl --val_manifest data/thought2text/val_human_caption.jsonl --train_cache data/thought2text/cache/clip_train.npy --val_cache data/thought2text/cache/clip_val.npy --train_index data/thought2text/cache/clip_index_train.json --val_index data/thought2text/cache/clip_index_val.json --eeg_checkpoint outputs/architectures/A2_temporal_spectral_spatial_full/checkpoints/best.pt --output_dir outputs/heavy_stage/semantic_fusion_A2_temporal_spectral_spatial_full --epochs 80 --batch_size 512 --hidden_dim 1024 --lr 0.001 --weight_decay 0.01 --num_workers 0 --log_every 20"
+    expected_output: "outputs/heavy_stage/semantic_fusion_A2_temporal_spectral_spatial_full/semantic_fusion_classifier.pt"
+    notes: "Downstream semantic fusion full run for completed A2 checkpoint completed. Val acc reached 0.9732."
+  - id: SEMANTIC_FUSION_A2_STRONG_EVAL
+    priority: 54
+    status: completed
+    command: "python -m src.eval.semantic_fusion_classifier_eval --classifier_checkpoint outputs/heavy_stage/semantic_fusion_A2_temporal_spectral_spatial_full/semantic_fusion_classifier.pt --prototype_bank outputs/semantic_caption/prototypes.pt --manifest data/thought2text/test_human_caption.jsonl --cache_dir data/thought2text/cache --output_dir outputs/final_semantic/semantic_fusion_A2_temporal_spectral_spatial_full_strong_eval --corruptions clean strong_blur strong_noise occlusion50 lowres16 mixed --modes vision_only real_eeg shuffled_eeg random_eeg eeg_only --eeg_checkpoint outputs/architectures/A2_temporal_spectral_spatial_full/checkpoints/best.pt --batch_size 128 --device auto"
+    expected_output: "outputs/final_semantic/semantic_fusion_A2_temporal_spectral_spatial_full_strong_eval/FULL_METRICS.csv"
+    notes: "A2 semantic fusion strong-degradation eval completed. Real EEG beats shuffled/random and vision-only in 6/6 conditions."
+
+  - id: SEMANTIC_FUSION_A2_SEED123_FULL
+    priority: 55
+    status: completed
+    command: "python -m src.train.train_semantic_fusion --seed 123 --train_manifest data/thought2text/train_human_caption.jsonl --val_manifest data/thought2text/val_human_caption.jsonl --train_cache data/thought2text/cache/clip_train.npy --val_cache data/thought2text/cache/clip_val.npy --train_index data/thought2text/cache/clip_index_train.json --val_index data/thought2text/cache/clip_index_val.json --eeg_checkpoint outputs/architectures/A2_temporal_spectral_spatial_full/checkpoints/best.pt --output_dir outputs/heavy_stage/semantic_fusion_A2_temporal_spectral_spatial_seed123_full --epochs 80 --batch_size 512 --hidden_dim 1024 --lr 0.001 --weight_decay 0.01 --num_workers 0 --log_every 20"
+    expected_output: "outputs/heavy_stage/semantic_fusion_A2_temporal_spectral_spatial_seed123_full/semantic_fusion_classifier.pt"
+    notes: "A2 downstream semantic fusion seed 123 full run completed; strong eval completed and included in A2 multi-seed summary."
+  - id: SEMANTIC_FUSION_A2_SEED123_STRONG_EVAL
+    priority: 56
+    status: completed
+    command: "python -m src.eval.semantic_fusion_classifier_eval --classifier_checkpoint outputs/heavy_stage/semantic_fusion_A2_temporal_spectral_spatial_seed123_full/semantic_fusion_classifier.pt --prototype_bank outputs/semantic_caption/prototypes.pt --manifest data/thought2text/test_human_caption.jsonl --cache_dir data/thought2text/cache --output_dir outputs/final_semantic/semantic_fusion_A2_temporal_spectral_spatial_seed123_strong_eval --corruptions clean strong_blur strong_noise occlusion50 lowres16 mixed --modes vision_only real_eeg shuffled_eeg random_eeg eeg_only --eeg_checkpoint outputs/architectures/A2_temporal_spectral_spatial_full/checkpoints/best.pt --batch_size 128 --device auto"
+    expected_output: "outputs/final_semantic/semantic_fusion_A2_temporal_spectral_spatial_seed123_strong_eval/FULL_METRICS.csv"
+    notes: "A2 semantic seed 123 strong-degradation eval completed."
+  - id: SEMANTIC_FUSION_A2_SEED2025_FULL
+    priority: 57
+    status: completed
+    command: "python -m src.train.train_semantic_fusion --seed 2025 --train_manifest data/thought2text/train_human_caption.jsonl --val_manifest data/thought2text/val_human_caption.jsonl --train_cache data/thought2text/cache/clip_train.npy --val_cache data/thought2text/cache/clip_val.npy --train_index data/thought2text/cache/clip_index_train.json --val_index data/thought2text/cache/clip_index_val.json --eeg_checkpoint outputs/architectures/A2_temporal_spectral_spatial_full/checkpoints/best.pt --output_dir outputs/heavy_stage/semantic_fusion_A2_temporal_spectral_spatial_seed2025_full --epochs 80 --batch_size 512 --hidden_dim 1024 --lr 0.001 --weight_decay 0.01 --num_workers 0 --log_every 20"
+    expected_output: "outputs/heavy_stage/semantic_fusion_A2_temporal_spectral_spatial_seed2025_full/semantic_fusion_classifier.pt"
+    notes: "A2 downstream semantic fusion seed 2025 full run completed; strong eval completed and included in A2 multi-seed summary."
+  - id: SEMANTIC_FUSION_A2_SEED2025_STRONG_EVAL
+    priority: 58
+    status: completed
+    command: "python -m src.eval.semantic_fusion_classifier_eval --classifier_checkpoint outputs/heavy_stage/semantic_fusion_A2_temporal_spectral_spatial_seed2025_full/semantic_fusion_classifier.pt --prototype_bank outputs/semantic_caption/prototypes.pt --manifest data/thought2text/test_human_caption.jsonl --cache_dir data/thought2text/cache --output_dir outputs/final_semantic/semantic_fusion_A2_temporal_spectral_spatial_seed2025_strong_eval --corruptions clean strong_blur strong_noise occlusion50 lowres16 mixed --modes vision_only real_eeg shuffled_eeg random_eeg eeg_only --eeg_checkpoint outputs/architectures/A2_temporal_spectral_spatial_full/checkpoints/best.pt --batch_size 128 --device auto"
+    expected_output: "outputs/final_semantic/semantic_fusion_A2_temporal_spectral_spatial_seed2025_strong_eval/FULL_METRICS.csv"
+    notes: "A2 semantic seed 2025 strong-degradation eval completed."
+
+  - id: SEMANTIC_FUSION_A2_RELIABILITY_GATED_SEED42_FULL
+    priority: 59
+    status: completed
+    command: "python -m src.train.train_semantic_fusion --seed 42 --fusion_type gated --class_prototypes data/thought2text/cache/class_image_prototypes.npy --train_manifest data/thought2text/train_human_caption.jsonl --val_manifest data/thought2text/val_human_caption.jsonl --train_cache data/thought2text/cache/clip_train.npy --val_cache data/thought2text/cache/clip_val.npy --train_index data/thought2text/cache/clip_index_train.json --val_index data/thought2text/cache/clip_index_val.json --eeg_checkpoint outputs/architectures/A2_temporal_spectral_spatial_full/checkpoints/best.pt --output_dir outputs/heavy_stage/semantic_fusion_A2_reliability_gated_seed42_full --epochs 80 --batch_size 512 --hidden_dim 1024 --lr 0.001 --weight_decay 0.01 --num_workers 0 --log_every 20"
+    expected_output: "outputs/heavy_stage/semantic_fusion_A2_reliability_gated_seed42_full/semantic_fusion_classifier.pt"
+    notes: "Reliability-aware gated semantic fusion ablation completed. Full 80-epoch run, not smoke. Val acc reached 0.9643."
+
+  - id: SEMANTIC_FUSION_A2_RELIABILITY_GATED_SEED42_STRONG_EVAL
+    priority: 60
+    status: completed
+    command: "python -m src.eval.semantic_fusion_classifier_eval --classifier_checkpoint outputs/heavy_stage/semantic_fusion_A2_reliability_gated_seed42_full/semantic_fusion_classifier.pt --prototype_bank outputs/semantic_caption/prototypes.pt --manifest data/thought2text/test_human_caption.jsonl --cache_dir data/thought2text/cache --output_dir outputs/final_semantic/semantic_fusion_A2_reliability_gated_seed42_strong_eval --corruptions clean strong_blur strong_noise occlusion50 lowres16 mixed --modes vision_only real_eeg shuffled_eeg random_eeg eeg_only --eeg_checkpoint outputs/architectures/A2_temporal_spectral_spatial_full/checkpoints/best.pt --batch_size 128 --device auto"
+    expected_output: "outputs/final_semantic/semantic_fusion_A2_reliability_gated_seed42_strong_eval/FULL_METRICS.csv"
+    notes: "Strong-degradation eval completed. Real EEG beats shuffled/random and vision-only in 6/6 conditions, but gated real EEG beats no-gate real EEG in only 1/6; gate_mean does not justify a learned reliability-gate claim."
+
+  - id: MASKED_EEG_PRETRAIN_THINGS_M0_CONVTRANSFORMER_BASE
+    priority: 61
+    status: completed
+    command: "python -m src.train.train_masked_eeg_pretrain --config configs/pretrain/masked_eeg_things_eeg2_m0_convtransformer_base.yaml"
+    expected_output: "outputs/pretrain/masked_eeg_things_eeg2_m0_convtransformer_base/MASKED_EEG_PRETRAIN_REPORT.md"
+    notes: "M0 ConvTransformer-base-style masked EEG pretraining variant on THINGS raw windows. Full 200-epoch config with early stopping; not a smoke run."
+
+  - id: TRANSFER_THINGS_M0_CONVTRANSFORMER_TO_THOUGHT2TEXT
+    priority: 62
+    status: completed
+    command: "python scripts/launch_transfer_after_pretrain_artifact.py --checkpoint outputs/pretrain/masked_eeg_things_eeg2_m0_convtransformer_base/checkpoints/best_masked_eeg.pt --report outputs/pretrain/masked_eeg_things_eeg2_m0_convtransformer_base/MASKED_EEG_PRETRAIN_REPORT.md --config configs/transfer/things_m0_convtransformer_pretrain_t2t_align.yaml --output-dir outputs/transfer/things_m0_convtransformer_pretrain_t2t_align --job-id TRANSFER_THINGS_M0_CONVTRANSFORMER_TO_THOUGHT2TEXT --log outputs/transfer/things_m0_convtransformer_pretrain_t2t_align/launcher.log"
+    expected_output: "outputs/transfer/things_m0_convtransformer_pretrain_t2t_align/alignment_metrics.json"
+    notes: "Watcher waits for M0 pretraining report and best checkpoint, then launches full Thought2Text transfer/alignment."
+
+  - id: MASKED_EEG_PRETRAIN_THINGS_M2_TEMPORAL_SPECTRAL_SPATIAL
+    priority: 63
+    status: completed
+    command: "python -m src.train.train_masked_eeg_pretrain --config configs/pretrain/masked_eeg_things_eeg2_m2_temporal_spectral_spatial.yaml"
+    expected_output: "outputs/pretrain/masked_eeg_things_eeg2_m2_temporal_spectral_spatial/MASKED_EEG_PRETRAIN_REPORT.md"
+    notes: "M2 temporal-spectral-spatial masked EEG pretraining variant on THINGS raw windows. Full 200-epoch config with early stopping; running concurrently with M0 because GPU memory had safe headroom."
+
+  - id: TRANSFER_THINGS_M2_TSST_TO_THOUGHT2TEXT
+    priority: 64
+    status: completed
+    command: "python scripts/launch_transfer_after_pretrain_artifact.py --checkpoint outputs/pretrain/masked_eeg_things_eeg2_m2_temporal_spectral_spatial/checkpoints/best_masked_eeg.pt --report outputs/pretrain/masked_eeg_things_eeg2_m2_temporal_spectral_spatial/MASKED_EEG_PRETRAIN_REPORT.md --config configs/transfer/things_m2_tsst_pretrain_t2t_align.yaml --output-dir outputs/transfer/things_m2_tsst_pretrain_t2t_align --job-id TRANSFER_THINGS_M2_TSST_TO_THOUGHT2TEXT --log outputs/transfer/things_m2_tsst_pretrain_t2t_align/launcher.log"
+    expected_output: "outputs/transfer/things_m2_tsst_pretrain_t2t_align/alignment_metrics.json"
+    notes: "Watcher waits for M2 pretraining report and best checkpoint, then launches full Thought2Text transfer/alignment."
+
+  - id: MASKED_EEG_PRETRAIN_THINGS_M1_DUALBRANCH_EEGCONFORMER
+    priority: 65
+    status: completed
+    command: "python scripts/launch_after_artifacts.py --artifact outputs/transfer/things_m0_convtransformer_pretrain_t2t_align/alignment_metrics.json --artifact outputs/transfer/things_m2_tsst_pretrain_t2t_align/alignment_metrics.json --command 'python -m src.train.train_masked_eeg_pretrain --config configs/pretrain/masked_eeg_things_eeg2_m1_dualbranch_eegconformer.yaml' --log outputs/pretrain/masked_eeg_things_eeg2_m1_dualbranch_eegconformer/launcher.log --job-id MASKED_EEG_PRETRAIN_THINGS_M1_DUALBRANCH_EEGCONFORMER"
+    expected_output: "outputs/pretrain/masked_eeg_things_eeg2_m1_dualbranch_eegconformer/MASKED_EEG_PRETRAIN_REPORT.md"
+    notes: "M1 DualBranchEEGConformer-style masked EEG pretraining on THINGS raw windows. Artifact-gated behind M0 and M2 Thought2Text transfer metrics so the current pretraining/transfer sequence can finish before another heavy job starts; full 200-epoch/early-stopping run, not smoke."
+
+  - id: TRANSFER_THINGS_M1_DUALBRANCH_TO_THOUGHT2TEXT
+    priority: 66
+    status: completed
+    command: "python scripts/launch_transfer_after_pretrain_artifact.py --checkpoint outputs/pretrain/masked_eeg_things_eeg2_m1_dualbranch_eegconformer/checkpoints/best_masked_eeg.pt --report outputs/pretrain/masked_eeg_things_eeg2_m1_dualbranch_eegconformer/MASKED_EEG_PRETRAIN_REPORT.md --config configs/transfer/things_m1_dualbranch_pretrain_t2t_align.yaml --output-dir outputs/transfer/things_m1_dualbranch_pretrain_t2t_align --job-id TRANSFER_THINGS_M1_DUALBRANCH_TO_THOUGHT2TEXT --log outputs/transfer/things_m1_dualbranch_pretrain_t2t_align/launcher.log"
+    expected_output: "outputs/transfer/things_m1_dualbranch_pretrain_t2t_align/alignment_metrics.json"
+    notes: "Watcher launches full Thought2Text transfer/alignment after M1 THINGS raw-window pretraining produces a formal report and best checkpoint."
+
+  - id: ARCH_A4_RAW_SPECTROGRAM_LATE_FUSION_FULL
+    priority: 67
+    status: completed
+    command: "python -m src.train.train_align --config configs/heavy_architectures/A4_raw_spectrogram_late_fusion_full.yaml --output_dir outputs/architectures/A4_raw_spectrogram_late_fusion_full --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/architectures/A4_raw_spectrogram_late_fusion_full/alignment_metrics.json"
+    notes: "Explicit A4 materialization completed. Unique-image R@1/R@5/R@10=0.0841/0.3093/0.5165, class_acc=0.3097; useful but below current P2 best R@5=0.3574."
+
+  - id: H1_P2_HARD_NEGATIVE_ALIGNMENT
+    priority: 68
+    status: completed
+    command: "python -m src.train.train_align --config configs/heavy_architectures/H1_P2_hard_negative.yaml --output_dir outputs/architectures/H1_P2_hard_negative --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/architectures/H1_P2_hard_negative/alignment_metrics.json"
+    notes: "Optional H1 hard-negative L8 run completed. Unique-image R@1/R@5/R@10=0.0541/0.2763/0.5045, class_acc=0.3097; below current P2 best R@5=0.3574, so preserve as a negative result rather than promoting."
+
+  - id: CLIP_ADAPTER_SIGLIP_PROTOTYPE_CALIBRATION
+    priority: 73
+    status: completed
+    command: "python scripts/precompute_vision.py --manifest data/thought2text/train.jsonl --out data/thought2text/cache/siglip_train.npy --index_out data/thought2text/cache/siglip_index_train.json --model_name google/siglip-base-patch16-224 --batch_size 64 --num_workers 0 --device auto --require_real_model --report outputs/clip_adapter/siglip_train_cache_report.md && python scripts/precompute_vision.py --manifest data/thought2text/val.jsonl --out data/thought2text/cache/siglip_val.npy --index_out data/thought2text/cache/siglip_index_val.json --model_name google/siglip-base-patch16-224 --batch_size 64 --num_workers 0 --device auto --require_real_model --report outputs/clip_adapter/siglip_val_cache_report.md"
+    expected_output: "data/thought2text/cache/siglip_val.npy"
+    notes: "Neural-aware vision-backbone follow-up. This caches SigLIP embeddings first; downstream adapter/alignment should be added only after cache dimensions and model compatibility are verified."
+
+  - id: EEG_IMAGENET_EXACT_A4_SCRATCH_FULL
+    priority: 69
+    status: completed
+    command: "python -m src.train.train_align --config configs/transfer/eeg_imagenet_exact_a4_scratch_full.yaml --output_dir outputs/transfer/eeg_imagenet_exact_a4_scratch_full --max_train_samples 0 --max_val_samples 0"
+    expected_output: "outputs/transfer/eeg_imagenet_exact_a4_scratch_full/alignment_metrics.json"
+    notes: "Completed strong raw+spectrogram full alignment on the EEG-ImageNet exact-linked subset from scratch. Unique-image R@1/R@5/R@10=0.0008/0.0036/0.0076, class_acc=0.0215; near-random negative result, not promoted."
+
+  - id: TRIMODAL_EEG_IMAGENET_EXACT_A2_SCRATCH_FULL
+    priority: 70
+    status: completed
+    command: "python -m src.train.train_trimodal_align --config configs/trimodal/eeg_imagenet_exact_a2_scratch_full.yaml"
+    expected_output: "outputs/trimodal/eeg_imagenet_exact_a2_scratch_full/TRIMODAL_FULL_REPORT.md"
+    notes: "Strong A2-style tri-modal EEG-image-text training on the EEG-ImageNet exact-linked subset from scratch. Queued after earlier masked-pretrained exact-linked tri-modal result was near random."

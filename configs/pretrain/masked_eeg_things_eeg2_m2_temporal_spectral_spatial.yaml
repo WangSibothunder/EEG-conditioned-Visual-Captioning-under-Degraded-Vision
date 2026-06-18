@@ -1,0 +1,39 @@
+experiment_id: masked_eeg_things_eeg2_m2_temporal_spectral_spatial
+seed: 2718
+device: auto
+data:
+  name: THINGS-EEG2 raw continuous EEG windows
+  train_eeg_cache: /cloud/cloud-ssd1/eeg_vision_caption_data/THINGS-EEG2/derived/raw_window_cache_full/things_eeg2_train_windows.npy
+  val_eeg_cache: /cloud/cloud-ssd1/eeg_vision_caption_data/THINGS-EEG2/derived/raw_window_cache_full/things_eeg2_val_windows.npy
+  eeg_channels: 64
+  eeg_timesteps: 250
+  force_rebuild_cache: false
+model:
+  name: MaskedEEGAutoencoder
+  variant: temporal_spectral_spatial
+  hidden_dim: 512
+  layers: 6
+  heads: 8
+  ffn_dim: 2048
+  spatial_layers: 2
+  dropout: 0.2
+train:
+  epochs: 200
+  batch_size: auto
+  initial_batch_size: 256
+  target_effective_batch_size: 512
+  lr: 0.0001
+  weight_decay: 0.05
+  bf16: true
+  num_workers: 4
+  patience: 25
+  mask_ratio_time: 0.35
+  mask_ratio_channel: 0.15
+  mask_span: 12
+  lambda_spectral: 0.2
+  lambda_smoothness: 0.1
+  log_every: 10
+  max_train_samples: 0
+  max_val_samples: 0
+output:
+  dir: outputs/pretrain/masked_eeg_things_eeg2_m2_temporal_spectral_spatial

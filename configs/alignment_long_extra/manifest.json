@@ -1,0 +1,18 @@
+[
+  {
+    "experiment_id": "P2_raw_spectrogram_seed123_long30",
+    "config": "P2_raw_spectrogram_seed123_long30.yaml"
+  },
+  {
+    "experiment_id": "P2_raw_spectrogram_seed2025_long30",
+    "config": "P2_raw_spectrogram_seed2025_long30.yaml"
+  },
+  {
+    "experiment_id": "P2_raw_spectrogram_dropout02_long30",
+    "config": "P2_raw_spectrogram_dropout02_long30.yaml"
+  },
+  {
+    "experiment_id": "P2_raw_spectrogram_lr5e5_long30",
+    "config": "P2_raw_spectrogram_lr5e5_long30.yaml"
+  }
+]

@@ -1,0 +1,69 @@
+experiment_id: P2_raw_spectrogram_smoke_long30
+seed: 42
+device: auto
+data:
+  train_manifest: data/thought2text/train.jsonl
+  val_manifest: data/thought2text/val.jsonl
+  test_manifest: data/thought2text/test.jsonl
+  root: data/thought2text
+  clip_train_cache: data/thought2text/cache/clip_train.npy
+  clip_val_cache: data/thought2text/cache/clip_val.npy
+  clip_test_cache: data/thought2text/cache/clip_test.npy
+  clip_index_train: data/thought2text/cache/clip_index_train.json
+  clip_index_val: data/thought2text/cache/clip_index_val.json
+  clip_index_test: data/thought2text/cache/clip_index_test.json
+model:
+  eeg_channels: 64
+  eeg_time_steps: 250
+  hidden_dim: 128
+  transformer_layers: 2
+  dropout: 0.1
+  eeg_embed_dim: 512
+  clip_embed_dim: 512
+  encoder_type: raw_spectrogram_fusion
+loss:
+  use_infonce: true
+  use_multi_positive_infonce: true
+  use_cosine: true
+  use_mse: false
+  use_class_ce: true
+  use_cls: true
+  use_supcon: false
+  use_prototype_alignment: true
+  use_similarity_distillation: false
+  use_similarity_distill: false
+  use_aug_consistency: false
+  use_same_image_subject: false
+  use_hard_negative: false
+  temperature: 0.07
+  tau_sim: 0.1
+  lambda_infonce: 1.0
+  lambda_multi_positive: 0.5
+  lambda_cosine: 0.5
+  lambda_mse: 0.5
+  lambda_class_ce: 0.3
+  lambda_cls: 0.3
+  lambda_supcon: 0.2
+  lambda_proto: 0.2
+  lambda_similarity: 0.2
+  lambda_sim: 0.2
+  lambda_aug: 0.1
+  lambda_same_image_subject: 0.2
+  lambda_hard_negative: 0.05
+  loss_combo: L1+L2+L4
+train:
+  batch_size: 96
+  grad_accum_steps: 1
+  epochs: 80
+  lr: 0.0001
+  weight_decay: 0.05
+  bf16: true
+  num_workers: 4
+  log_every: 20
+  patience: 10
+  max_train_samples: 0
+  max_val_samples: 0
+output:
+  dir: outputs/alignment_long/P2_raw_spectrogram_smoke_long30
+notes: Parallel stage raw E3 + spectrogram E7 late-fusion smoke alignment. Long continuation
+  launched after 15/15 screening completed; screen_epochs override uses 30 epochs.

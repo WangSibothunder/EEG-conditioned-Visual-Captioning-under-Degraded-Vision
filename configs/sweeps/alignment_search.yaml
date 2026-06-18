@@ -1,0 +1,183 @@
+seed: 42
+device: auto
+
+data:
+  train_manifest: data/thought2text/train.jsonl
+  val_manifest: data/thought2text/val.jsonl
+  test_manifest: data/thought2text/test.jsonl
+  root: data/thought2text
+  clip_train_cache: data/thought2text/cache/clip_train.npy
+  clip_val_cache: data/thought2text/cache/clip_val.npy
+  clip_test_cache: data/thought2text/cache/clip_test.npy
+  clip_index_train: data/thought2text/cache/clip_index_train.json
+  clip_index_val: data/thought2text/cache/clip_index_val.json
+  clip_index_test: data/thought2text/cache/clip_index_test.json
+
+model:
+  eeg_channels: 64
+  eeg_time_steps: 250
+  hidden_dim: 128
+  transformer_layers: 2
+  dropout: 0.1
+  eeg_embed_dim: 512
+  clip_embed_dim: 512
+
+train:
+  batch_size: 128
+  grad_accum_steps: 1
+  epochs: 20
+  lr: 0.0001
+  weight_decay: 0.05
+  bf16: true
+  num_workers: 4
+  log_every: 20
+  patience: 5
+  max_train_samples: 0
+  max_val_samples: 0
+
+loss_defaults:
+  use_infonce: true
+  use_multi_positive_infonce: false
+  use_cosine: true
+  use_mse: false
+  use_class_ce: true
+  use_cls: true
+  use_supcon: false
+  use_prototype_alignment: false
+  use_similarity_distillation: false
+  use_similarity_distill: false
+  use_aug_consistency: false
+  use_same_image_subject: false
+  use_hard_negative: false
+  temperature: 0.07
+  tau_sim: 0.1
+  lambda_infonce: 1.0
+  lambda_multi_positive: 0.5
+  lambda_cosine: 0.5
+  lambda_mse: 0.5
+  lambda_class_ce: 0.3
+  lambda_cls: 0.3
+  lambda_supcon: 0.2
+  lambda_proto: 0.2
+  lambda_similarity: 0.2
+  lambda_sim: 0.2
+  lambda_aug: 0.1
+  lambda_same_image_subject: 0.2
+  lambda_hard_negative: 0.05
+
+output:
+  root: outputs/day4_search
+
+candidates:
+  - experiment_id: T0
+    encoder_type: tiny
+    loss_combo: L0
+    loss:
+      use_infonce: false
+      use_multi_positive_infonce: false
+      use_cosine: false
+      use_mse: true
+      use_class_ce: true
+      use_cls: true
+      use_similarity_distillation: false
+      use_similarity_distill: false
+      use_aug_consistency: false
+  - experiment_id: T1
+    encoder_type: tiny
+    loss_combo: L1
+    loss: {}
+  - experiment_id: T2
+    encoder_type: eegnet
+    loss_combo: L1
+    loss: {}
+  - experiment_id: T3
+    encoder_type: multiscale_tcn
+    loss_combo: L1
+    loss: {}
+  - experiment_id: T4
+    encoder_type: convtransformer_base
+    loss_combo: L1
+    loss: {}
+  - experiment_id: S1
+    encoder_type: convtransformer_base
+    loss_combo: L1+L2+L4
+    loss:
+      use_multi_positive_infonce: true
+      use_prototype_alignment: true
+  - experiment_id: S2
+    encoder_type: convtransformer_base
+    loss_combo: L1+L2+L3+L4
+    loss:
+      use_multi_positive_infonce: true
+      use_supcon: true
+      use_prototype_alignment: true
+  - experiment_id: S3
+    encoder_type: convtransformer_base
+    loss_combo: L1+L2+L4+L5
+    loss:
+      use_multi_positive_infonce: true
+      use_prototype_alignment: true
+      use_similarity_distillation: true
+      use_similarity_distill: true
+  - experiment_id: S4
+    encoder_type: convtransformer_base
+    loss_combo: L1+L2+L4+L5+L6
+    loss:
+      use_multi_positive_infonce: true
+      use_prototype_alignment: true
+      use_similarity_distillation: true
+      use_similarity_distill: true
+      use_aug_consistency: true
+  - experiment_id: S5
+    encoder_type: convtransformer_base
+    loss_combo: L1+L2+L3+L4+L5+L6
+    loss:
+      use_multi_positive_infonce: true
+      use_supcon: true
+      use_prototype_alignment: true
+      use_similarity_distillation: true
+      use_similarity_distill: true
+      use_aug_consistency: true
+  - experiment_id: X1
+    encoder_type: subject_adaptive
+    loss_combo: L1+L2+L4+L5
+    requires_repeated_image: true
+    loss:
+      use_multi_positive_infonce: true
+      use_prototype_alignment: true
+      use_similarity_distillation: true
+      use_similarity_distill: true
+  - experiment_id: X2
+    encoder_type: subject_adaptive
+    loss_combo: L1+L2+L4+L5+L7
+    requires_repeated_image: true
+    loss:
+      use_multi_positive_infonce: true
+      use_prototype_alignment: true
+      use_similarity_distillation: true
+      use_similarity_distill: true
+      use_same_image_subject: true
+  - experiment_id: X3
+    encoder_type: subject_adaptive
+    loss_combo: L1+L2+L3+L4+L7
+    requires_repeated_image: true
+    loss:
+      use_multi_positive_infonce: true
+      use_supcon: true
+      use_prototype_alignment: true
+      use_same_image_subject: true
+  - experiment_id: G1
+    encoder_type: convtransformer_strong
+    loss_combo: L1+L2+L4
+    loss:
+      use_multi_positive_infonce: true
+      use_prototype_alignment: true
+  - experiment_id: G2
+    encoder_type: convtransformer_strong
+    loss_combo: L1+L2+L4+L5+L6
+    loss:
+      use_multi_positive_infonce: true
+      use_prototype_alignment: true
+      use_similarity_distillation: true
+      use_similarity_distill: true
+      use_aug_consistency: true

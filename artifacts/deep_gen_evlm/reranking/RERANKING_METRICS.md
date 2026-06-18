@@ -1,0 +1,34 @@
+# Best-of-N Reranking Metrics
+
+| file | corruption | mode | count | valid_caption_rate | invalid_output_rate | caption_class_hit | caption_topk_class_hit | avg_caption_length | distinct_caption_count | repetition_rate | real_minus_vision | real_minus_shuffled | real_minus_random |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| reranking/clean_vision_only.jsonl | clean | vision_only | 1997 | 0.996995 | 0.003005 | 0.587381 | 0.616925 | 10.435153 | 273 | 0.205888 | 0.007011 | 0.036054 | 0.044066 |
+| reranking/clean_real_eeg.jsonl | clean | real_eeg | 1997 | 0.993991 | 0.006009 | 0.594392 | 0.614922 | 10.463696 | 653 | 0.204974 | 0.007011 | 0.036054 | 0.044066 |
+| reranking/clean_shuffled_eeg.jsonl | clean | shuffled_eeg | 1997 | 0.998998 | 0.001002 | 0.558338 | 0.628443 | 10.406109 | 856 | 0.206447 | 0.007011 | 0.036054 | 0.044066 |
+| reranking/clean_random_eeg.jsonl | clean | random_eeg | 1997 | 1.000000 | 0.000000 | 0.550325 | 0.646470 | 10.318978 | 587 | 0.205244 | 0.007011 | 0.036054 | 0.044066 |
+| reranking/clean_eeg_only.jsonl | clean | eeg_only | 1997 | 0.998998 | 0.001002 | 0.134201 | 0.544817 | 10.387581 | 430 | 0.225047 | 0.007011 | 0.036054 | 0.044066 |
+| reranking/lowres16_vision_only.jsonl | lowres16 | vision_only | 1997 | 0.954432 | 0.045568 | 0.152228 | 0.366049 | 9.105158 | 324 | 0.206332 | 0.110165 | 0.147722 | 0.162243 |
+| reranking/lowres16_real_eeg.jsonl | lowres16 | real_eeg | 1997 | 0.955433 | 0.044567 | 0.262394 | 0.441662 | 9.181773 | 1239 | 0.208295 | 0.110165 | 0.147722 | 0.162243 |
+| reranking/lowres16_shuffled_eeg.jsonl | lowres16 | shuffled_eeg | 1997 | 0.950926 | 0.049074 | 0.114672 | 0.412619 | 9.106159 | 1335 | 0.205343 | 0.110165 | 0.147722 | 0.162243 |
+| reranking/lowres16_random_eeg.jsonl | lowres16 | random_eeg | 1997 | 0.947922 | 0.052078 | 0.100150 | 0.563846 | 9.651978 | 903 | 0.238669 | 0.110165 | 0.147722 | 0.162243 |
+| reranking/lowres16_eeg_only.jsonl | lowres16 | eeg_only | 1997 | 0.914872 | 0.085128 | 0.116675 | 0.467201 | 9.223836 | 685 | 0.208002 | 0.110165 | 0.147722 | 0.162243 |
+| reranking/mixed_vision_only.jsonl | mixed | vision_only | 1997 | 0.993991 | 0.006009 | 0.039559 | 0.141212 | 10.758638 | 190 | 0.232371 | 0.134702 | 0.133701 | 0.138708 |
+| reranking/mixed_real_eeg.jsonl | mixed | real_eeg | 1997 | 0.987481 | 0.012519 | 0.174261 | 0.476214 | 10.220831 | 971 | 0.239168 | 0.134702 | 0.133701 | 0.138708 |
+| reranking/mixed_shuffled_eeg.jsonl | mixed | shuffled_eeg | 1997 | 0.987481 | 0.012519 | 0.040561 | 0.466199 | 10.358538 | 1067 | 0.237701 | 0.134702 | 0.133701 | 0.138708 |
+| reranking/mixed_random_eeg.jsonl | mixed | random_eeg | 1997 | 0.992989 | 0.007011 | 0.035553 | 0.936405 | 8.945919 | 353 | 0.242621 | 0.134702 | 0.133701 | 0.138708 |
+| reranking/mixed_eeg_only.jsonl | mixed | eeg_only | 1997 | 0.964447 | 0.035553 | 0.135704 | 0.525288 | 10.007511 | 586 | 0.240381 | 0.134702 | 0.133701 | 0.138708 |
+| reranking/occlusion50_vision_only.jsonl | occlusion50 | vision_only | 1997 | 0.994492 | 0.005508 | 0.467201 | 0.559840 | 9.849274 | 295 | 0.206494 | 0.056585 | 0.092639 | 0.076114 |
+| reranking/occlusion50_real_eeg.jsonl | occlusion50 | real_eeg | 1997 | 0.996495 | 0.003505 | 0.523786 | 0.592889 | 9.889835 | 828 | 0.206615 | 0.056585 | 0.092639 | 0.076114 |
+| reranking/occlusion50_shuffled_eeg.jsonl | occlusion50 | shuffled_eeg | 1997 | 0.997997 | 0.002003 | 0.431147 | 0.586880 | 9.888833 | 1131 | 0.209250 | 0.056585 | 0.092639 | 0.076114 |
+| reranking/occlusion50_random_eeg.jsonl | occlusion50 | random_eeg | 1997 | 0.998498 | 0.001502 | 0.447672 | 0.687031 | 9.742113 | 714 | 0.208696 | 0.056585 | 0.092639 | 0.076114 |
+| reranking/occlusion50_eeg_only.jsonl | occlusion50 | eeg_only | 1997 | 0.957436 | 0.042564 | 0.129695 | 0.526790 | 9.567852 | 564 | 0.227095 | 0.056585 | 0.092639 | 0.076114 |
+| reranking/strong_blur_vision_only.jsonl | strong_blur | vision_only | 1997 | 0.939910 | 0.060090 | 0.443165 | 0.491237 | 9.265398 | 347 | 0.217617 | 0.040060 | 0.065098 | 0.073610 |
+| reranking/strong_blur_real_eeg.jsonl | strong_blur | real_eeg | 1997 | 0.948423 | 0.051577 | 0.483225 | 0.538808 | 9.257386 | 1066 | 0.224742 | 0.040060 | 0.065098 | 0.073610 |
+| reranking/strong_blur_shuffled_eeg.jsonl | strong_blur | shuffled_eeg | 1997 | 0.936405 | 0.063595 | 0.418127 | 0.533300 | 9.162243 | 1358 | 0.225330 | 0.040060 | 0.065098 | 0.073610 |
+| reranking/strong_blur_random_eeg.jsonl | strong_blur | random_eeg | 1997 | 0.969955 | 0.030045 | 0.409614 | 0.610416 | 9.597396 | 1064 | 0.221629 | 0.040060 | 0.065098 | 0.073610 |
+| reranking/strong_blur_eeg_only.jsonl | strong_blur | eeg_only | 1997 | 0.923385 | 0.076615 | 0.121683 | 0.454682 | 9.306960 | 766 | 0.203711 | 0.040060 | 0.065098 | 0.073610 |
+| reranking/strong_noise_vision_only.jsonl | strong_noise | vision_only | 1997 | 0.974962 | 0.025038 | 0.345018 | 0.527792 | 9.878317 | 1085 | 0.208325 | 0.079119 | 0.113170 | 0.079119 |
+| reranking/strong_noise_real_eeg.jsonl | strong_noise | real_eeg | 1997 | 0.982974 | 0.017026 | 0.424136 | 0.531798 | 10.128192 | 1171 | 0.210913 | 0.079119 | 0.113170 | 0.079119 |
+| reranking/strong_noise_shuffled_eeg.jsonl | strong_noise | shuffled_eeg | 1997 | 0.974962 | 0.025038 | 0.310966 | 0.530796 | 9.979469 | 1301 | 0.209544 | 0.079119 | 0.113170 | 0.079119 |
+| reranking/strong_noise_random_eeg.jsonl | strong_noise | random_eeg | 1997 | 0.987481 | 0.012519 | 0.345018 | 0.617426 | 10.308963 | 984 | 0.214031 | 0.079119 | 0.113170 | 0.079119 |
+| reranking/strong_noise_eeg_only.jsonl | strong_noise | eeg_only | 1997 | 0.937406 | 0.062594 | 0.140711 | 0.520781 | 10.246870 | 671 | 0.241474 | 0.079119 | 0.113170 | 0.079119 |

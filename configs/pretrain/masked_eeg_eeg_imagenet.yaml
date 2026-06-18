@@ -1,0 +1,40 @@
+experiment_id: masked_eeg_eeg_imagenet_dualbranch_heavy
+seed: 42
+device: auto
+data:
+  name: EEG-ImageNet
+  train_manifest: data/EEG-ImageNet/train.jsonl
+  val_manifest: data/EEG-ImageNet/val.jsonl
+  train_eeg_cache: data/EEG-ImageNet/cache/eeg_pretrain_train.npy
+  val_eeg_cache: data/EEG-ImageNet/cache/eeg_pretrain_val.npy
+  eeg_channels: 62
+  eeg_timesteps: 501
+  force_rebuild_cache: false
+model:
+  name: MaskedEEGAutoencoder
+  hidden_dim: 512
+  layers: 8
+  heads: 8
+  ffn_dim: 2048
+  spatial_layers: 2
+  dropout: 0.15
+train:
+  epochs: 200
+  batch_size: auto
+  initial_batch_size: 128
+  target_effective_batch_size: 256
+  lr: 0.0001
+  weight_decay: 0.05
+  bf16: true
+  num_workers: 4
+  patience: 25
+  mask_ratio_time: 0.35
+  mask_ratio_channel: 0.15
+  mask_span: 12
+  lambda_spectral: 0.2
+  lambda_smoothness: 0.1
+  log_every: 10
+  max_train_samples: 0
+  max_val_samples: 0
+output:
+  dir: outputs/pretrain/masked_eeg_eeg_imagenet_dualbranch_heavy

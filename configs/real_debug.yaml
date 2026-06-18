@@ -1,0 +1,35 @@
+seed: 11
+device: auto
+output_dir: outputs/real_debug
+
+data:
+  root: data/real/eeg_image_cvpr_sample
+  train_manifest: train.jsonl
+  val_manifest: validation.jsonl
+  image_size: 224
+  eeg_channels: 64
+  eeg_timesteps: 250
+
+model:
+  vision_model: openai/clip-vit-base-patch32
+  llm_model: Qwen/Qwen2.5-1.5B-Instruct
+  use_tiny_debug_model: true
+  image_dim: 512
+  eeg_dim: 512
+  prompt_tokens: 4
+  max_text_length: 64
+
+train:
+  batch_size: 2
+  grad_accum_steps: 1
+  epochs: 1
+  lr: 0.001
+  weight_decay: 0.01
+  max_steps: 2
+  log_every: 1
+  save_every_epoch: true
+  amp: true
+
+generation:
+  max_new_tokens: 16
+  num_samples: 2

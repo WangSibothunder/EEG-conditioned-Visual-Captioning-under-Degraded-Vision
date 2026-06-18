@@ -1,0 +1,66 @@
+experiment_id: eeg_imagenet_exact_a4_scratch_full
+seed: 6161
+device: auto
+data:
+  train_manifest: data/EEG-ImageNet/train_image_exact.jsonl
+  val_manifest: data/EEG-ImageNet/val_image_exact.jsonl
+  test_manifest: data/EEG-ImageNet/test_image_exact.jsonl
+  root: data/EEG-ImageNet
+  clip_train_cache: data/EEG-ImageNet/cache/clip_train_image_exact.npy
+  clip_val_cache: data/EEG-ImageNet/cache/clip_val_image_exact.npy
+  clip_test_cache: data/EEG-ImageNet/cache/clip_test_image_exact.npy
+  clip_index_train: data/EEG-ImageNet/cache/clip_index_train_image_exact.json
+  clip_index_val: data/EEG-ImageNet/cache/clip_index_val_image_exact.json
+  clip_index_test: data/EEG-ImageNet/cache/clip_index_test_image_exact.json
+  eeg_train_cache: data/EEG-ImageNet/cache/eeg_train_image_exact.npy
+  eeg_val_cache: data/EEG-ImageNet/cache/eeg_val_image_exact.npy
+model:
+  eeg_channels: 62
+  eeg_time_steps: 501
+  hidden_dim: 384
+  transformer_layers: 6
+  dropout: 0.30
+  eeg_embed_dim: 512
+  clip_embed_dim: 512
+  encoder_type: raw_spectrogram_fusion
+loss:
+  use_infonce: true
+  use_multi_positive_infonce: true
+  use_cosine: true
+  use_mse: false
+  use_class_ce: true
+  use_cls: true
+  use_supcon: true
+  use_prototype_alignment: true
+  use_similarity_distillation: true
+  use_similarity_distill: true
+  use_aug_consistency: false
+  use_same_image_subject: false
+  use_hard_negative: false
+  temperature: 0.07
+  tau_sim: 0.1
+  lambda_infonce: 1.0
+  lambda_multi_positive: 0.5
+  lambda_cosine: 0.5
+  lambda_class_ce: 0.3
+  lambda_cls: 0.3
+  lambda_supcon: 0.2
+  lambda_proto: 0.2
+  lambda_similarity: 0.2
+  lambda_sim: 0.2
+  loss_combo: L1+L2+L3+L4+L5
+train:
+  batch_size: 512
+  grad_accum_steps: 1
+  epochs: 120
+  lr: 0.0001
+  weight_decay: 0.05
+  bf16: true
+  num_workers: 0
+  log_every: 20
+  patience: 18
+  max_train_samples: 0
+  max_val_samples: 0
+output:
+  dir: outputs/transfer/eeg_imagenet_exact_a4_scratch_full
+notes: Strong raw+spectrogram full alignment on the EEG-ImageNet exact-linked subset from scratch. This is queued as a scientifically useful follow-up because the earlier exact-linked run used a masked-pretrained encoder and was near random.

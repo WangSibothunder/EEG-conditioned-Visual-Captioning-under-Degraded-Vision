@@ -1,0 +1,27 @@
+[
+  {
+    "experiment_id": "S3_stage2_long30",
+    "config": "S3_stage2_long30.yaml",
+    "source_experiment": "S3_stage2"
+  },
+  {
+    "experiment_id": "S1_stage2_seed42_long30",
+    "config": "S1_stage2_seed42_long30.yaml",
+    "source_experiment": "S1_stage2_seed42"
+  },
+  {
+    "experiment_id": "P2_raw_spectrogram_smoke_long30",
+    "config": "P2_raw_spectrogram_smoke_long30.yaml",
+    "source_experiment": "P2_raw_spectrogram_smoke"
+  },
+  {
+    "experiment_id": "T4_stage2_seed2025_long30",
+    "config": "T4_stage2_seed2025_long30.yaml",
+    "source_experiment": "T4_stage2_seed2025"
+  },
+  {
+    "experiment_id": "G2_dropout035_recheck_long30",
+    "config": "G2_dropout035_recheck_long30.yaml",
+    "source_experiment": "G2_dropout035_recheck"
+  }
+]

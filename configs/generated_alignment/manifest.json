@@ -1,0 +1,62 @@
+[
+  {
+    "config": "T0.yaml",
+    "experiment_id": "T0"
+  },
+  {
+    "config": "T1.yaml",
+    "experiment_id": "T1"
+  },
+  {
+    "config": "T2.yaml",
+    "experiment_id": "T2"
+  },
+  {
+    "config": "T3.yaml",
+    "experiment_id": "T3"
+  },
+  {
+    "config": "T4.yaml",
+    "experiment_id": "T4"
+  },
+  {
+    "config": "S1.yaml",
+    "experiment_id": "S1"
+  },
+  {
+    "config": "S2.yaml",
+    "experiment_id": "S2"
+  },
+  {
+    "config": "S3.yaml",
+    "experiment_id": "S3"
+  },
+  {
+    "config": "S4.yaml",
+    "experiment_id": "S4"
+  },
+  {
+    "config": "S5.yaml",
+    "experiment_id": "S5"
+  },
+  {
+    "config": "X1.yaml",
+    "experiment_id": "X1"
+  },
+  {
+    "config": "X2.yaml",
+    "experiment_id": "X2"
+  },
+  {
+    "config": "X3.yaml",
+    "experiment_id": "X3"
+  },
+  {
+    "config": "G1.yaml",
+    "experiment_id": "G1"
+  },
+  {
+    "config": "G2.yaml",
+    "experiment_id": "G2"
+  }
+]

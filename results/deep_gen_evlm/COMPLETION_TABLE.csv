@@ -1,0 +1,10 @@
+item,status,train_samples,val_samples,test_samples,epochs,peak_gpu_memory,runtime,best_metric,reason_if_not_completed
+Route5 full adapter,completed,full,full,full,3,9.137809753417969,145.13940167427063,0.5079619429143716,
+Route5 LoRA r8,completed,full,full,full,3,6.50826358795166,348.0418734550476,0.5845067601402103,
+Route5 LoRA r16,completed,full,full,full,3,6.562549114227295,356.7719428539276,0.49394424970789524,
+Route5 T1 class-only target,completed,full,full,full,3,6.196142196655273,355.1494765281677,0.5768052078117176,
+Route5 T3 class+BLIP target,completed,full,full,full,3,6.538196086883545,350.60800099372864,0.520644299783008,
+Route5 best-of-N reranking,completed,n/a,n/a,full,0,,,0.5906960440660991,
+Route1 Qwen-LoRA r8 clean target,completed,full,full,full,3,8.186007976531982,200.4564700126648,0.1984309798030379,
+Route1 Qwen-LoRA r16 clean target if attempted,completed,full,full,full,3,8.214099407196045,198.5890007019043,0.15504924052745786,optional after r8
+AutoSOTA if attempted,not_attempted,,,,,,,,required work consumed this run

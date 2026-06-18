@@ -1,0 +1,41 @@
+seed: 7
+device: auto
+output_dir: outputs/overnight/fusion_qwen15
+exact_output_dir: true
+eeg_ckpt: outputs/overnight/align_strong/checkpoints/best.pt
+
+data:
+  root: data/thought2text
+  train_manifest: data/thought2text/train.jsonl
+  val_manifest: data/thought2text/val.jsonl
+  image_size: 224
+  eeg_channels: 64
+  eeg_timesteps: 250
+  clip_train_cache: data/thought2text/cache/clip_train.npy
+  clip_val_cache: data/thought2text/cache/clip_val.npy
+
+model:
+  vision_model: openai/clip-vit-base-patch32
+  llm_model: Qwen/Qwen2.5-1.5B-Instruct
+  use_tiny_debug_model: false
+  require_real_lm: true
+  freeze_lm: true
+  image_dim: 512
+  eeg_dim: 512
+  prompt_tokens: 4
+  max_text_length: 48
+
+train:
+  batch_size: 2
+  grad_accum_steps: 4
+  epochs: 1
+  lr: 0.001
+  weight_decay: 0.01
+  max_steps: 32
+  max_val_batches: 64
+  freeze_eeg_encoder: true
+  amp: true
+
+generation:
+  max_new_tokens: 16
+  num_samples: 2
