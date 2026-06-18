@@ -20,7 +20,7 @@
 
 \placeholderfigure{系统总体架构图}{overall-system-placeholder}{4.5cm}
 
-系统的数据流如下：退化图像经冻结的 CLIP ViT 编码器处理后，输出 pooled image embedding（512 维）和 visual patch tokens（$50\times512$ 维）；EEG trial 经 A2 encoder 处理后，输出 pooled EEG embedding（512 维）和 EEG tokens（$4\times512$ 维）。在语义预测分支中，两个 pooled embedding 通过 gated fusion 融合后与文本原型进行相似度匹配，产生类别预测。在 token-level 分支中，visual tokens 与 EEG tokens 经 VTF cross-attention 产生 enhanced vision tokens。在生成式分支中，enhanced vision tokens 通过 Qwen2-VL adapter 注入语言模型，经过 LoRA 微调的解码器生成自然语言描述。
+系统的数据流如下：退化图像经冻结的 CLIP ViT 编码器处理后，输出 pooled image embedding（512 维）和 visual patch tokens（$50\times512$ 维）；EEG trial 经 A2 encoder 处理后，输出 pooled EEG embedding（512 维）和 EEG tokens（$4\times512$ 维）。在语义预测分支中，两个 pooled embedding 通过 gated fusion 融合后与文本原型进行相似度匹配，产生类别预测。在 token-level 分支中，visual tokens 与 EEG tokens 经 VTF cross-attention 产生 enhanced vision tokens。在生成式分支中，增强视觉 token 先通过本设计实现的轻量 prefix adapter 映射到 Qwen2-VL 可接收的嵌入空间，再与语义提示文本共同输入生成式解码器，经过 LoRA 微调后生成自然语言描述。
 
 \subsection{模块划分}
 

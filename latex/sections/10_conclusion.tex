@@ -6,7 +6,7 @@
 
 \textbf{(1) 构建了视觉退化条件下 EEG 辅助语义识别的实验框架}。设置了六种退化条件（clean、lowres16、strong\_blur、strong\_noise、occlusion50、mixed）和五种 EEG 对照模式（real EEG、vision-only、shuffled EEG、random EEG、eeg-only），采用 image-level split 防止数据泄漏。
 
-\textbf{(2) 实现了 A2 temporal-spectral-spatial EEG 语义融合模型}。在 CLIP 语义空间中通过三支路并行编码 + 门控残差融合，验证了真实配对 EEG 能够显著提升退化图像的语义识别性能。在 18/18 的 seed-condition 组合中，real EEG 均优于所有对照。
+\textbf{(2) 实现了 A2 时间-频谱-空间 EEG 语义融合模型}。在 CLIP 语义空间中通过三支路并行编码加门控残差融合，在本数据集和当前设置下，real EEG 在退化图像语义识别中表现出了高于 vision-only 和 shuffled/random EEG 对照组的性能。在 18/18 的 seed-condition 组合中，real EEG 均高于所有对照组。
 
 \textbf{(3) 完成了 VTF token-level EEG 视觉特征增强}。将 EEG 信息从 pooled embedding 层推进到 visual token 层，为生成式视觉语言模型提供了可用的 EEG-enhanced 视觉输入。
 
@@ -22,4 +22,4 @@
 
 未来可尝试的方向包括：在更大规模的 EEG-image-text 数据集上进行预训练和迁移、引入 subject adaptation 模块降低个体差异影响、使用更强的 Q-Former 或 Perceiver bridge 替代当前的双层 cross-attention 进行 token fusion。
 
-需要再次说明，本课程设计是在小样本 EEG-image 数据条件下的初步探索。实验结果表明，真实配对 EEG 在视觉退化条件下能够为视觉语言模型提供统计上显著的语义辅助信息，但受限于数据规模和模型复杂度，当前生成的自由文本描述的质量仍远不能与大规模视觉语言模型在清洁图像上的输出相比。本文的工作定位是通过严格的对照实验，为 EEG 作为视觉语义增强信号的可行性提供经验性证据。
+需要说明的是，本课程设计是在小样本 EEG-image 数据条件下的初步探索。实验结果初步表明，真实配对 EEG 在视觉退化条件下能够为视觉语言模型提供一定程度的语义辅助信息，但受限于数据规模和模型复杂度，当前生成的自由文本描述的质量仍远不能与大规模视觉语言模型在清洁图像上的输出相比。本设计的工作定位是：通过严格的对照实验，为 EEG 作为视觉语义增强信号的可行性提供初步的经验性参考。本课程设计构建的是一个\textbf{小样本 EEG-enhanced generative VLM 原型}，尚有大量工程和算法层面的改进空间。
