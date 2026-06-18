@@ -1,0 +1,20 @@
+\begin{center}
+{\heitifont\zihao{2} 摘\quad 要}
+\end{center}
+
+% 写作目标：500--700 字。请在最终报告中替换本段。
+本文围绕视觉退化条件下 EEG 辅助视觉语言模型的语义识别与图像描述生成问题展开研究。针对低分辨率、模糊、噪声和遮挡等退化图像场景，本文首先以 CLIP 图文语义空间作为跨模态桥梁，构建图像、类别文本和 EEG 表示之间的统一语义对齐框架；随后设计 A2 temporal-spectral-spatial EEG 语义融合模型，利用 EEG 的时间、频谱和空间通道信息对退化图像语义表示进行补充；进一步提出 token-level EEG-enhanced VLM，将 CLIP ViT 输出的 visual tokens 与 EEG tokens 通过 cross-attention 融合，得到 EEG-enhanced vision tokens；最后将增强后的视觉 tokens 输入 Qwen2-VL 生成式模型，通过 LoRA 微调和 best-of-N reranking 生成自然语言 caption。实验在 Thought2Text/EEGCVPR 数据集上进行，采用 image-level split 避免图像泄漏，并设置 real EEG、vision-only、shuffled EEG 和 random EEG 多种对照模式。实验结果表明，A2 模型在语义预测任务中取得最强定量结果，真实配对 EEG 在多种退化条件下均优于 vision-only 和随机/打乱 EEG 对照；生成式 EVLM 原型在 full-test 设置下也表现出 real EEG 对 caption class-hit 的提升。本文验证了小样本条件下 EEG 作为视觉语义增强信号辅助 VLM 的可行性。
+
+\vspace{0.5cm}
+\noindent\textbf{关键词：}脑电信号；视觉语言模型；CLIP；视觉退化；多模态融合；LoRA；图像描述生成
+
+\clearpage
+\begin{center}
+{\bfseries\zihao{2} Abstract}
+\end{center}
+
+% Optional English abstract. Keep it concise.
+This report studies EEG-assisted semantic recognition and generative captioning under degraded visual conditions. A CLIP-based semantic space is adopted as the bridge between images, class text prototypes, and EEG representations. We first design an A2 temporal-spectral-spatial EEG fusion model for robust semantic prediction. We then build a token-level EEG-enhanced VLM by injecting EEG tokens into CLIP ViT visual tokens through cross-attention. Finally, EEG-enhanced vision tokens are fed into a Qwen2-VL based generative decoder with LoRA adaptation and best-of-N reranking to produce free-form captions. Experiments on the Thought2Text/EEGCVPR dataset show that paired real EEG improves semantic prediction and caption class-hit compared with vision-only, shuffled EEG, and random EEG controls under degraded visual conditions.
+
+\vspace{0.5cm}
+\noindent\textbf{Keywords:} EEG; Vision-Language Model; CLIP; Visual Degradation; Multimodal Fusion; LoRA; Image Captioning

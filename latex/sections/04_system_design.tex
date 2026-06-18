@@ -1,0 +1,73 @@
+\section{系统总体设计}
+
+本章从宏观角度阐述系统的设计思路、总体架构、模块划分和实验流程.
+
+\subsection{总体设计思路}
+
+本文的系统设计并非一步到位, 而是遵循从简化到复杂、从定量评估到生成式验证的递进路线. 整个项目的演进分为四个阶段:
+
+\textbf{第一阶段: CLIP semantic bridge（语义桥梁构建）}. 鉴于 Thought2Text 数据集仅有 40 类约 12000 条 EEG trial, 直接从 EEG 生成自由文本面临严重的数据不足问题. 因此, 本文首先利用 CLIP 预训练的图文语义空间作为跨模态桥梁, 将图像、文本类别原型和 EEG 表示对齐到统一空间, 使 EEG 信号在受约束的语义空间中发挥作用. 这一设计降低了对数据量和模型规模的依赖.
+
+\textbf{第二阶段: A2 EEG semantic fusion（语义融合模型）}. 在 CLIP 语义空间中, 设计并训练 A2 temporal-spectral-spatial EEG encoder, 学习从 EEG 信号中提取对退化图像有补充作用的语义信息. A2 模型以分类损失为主要训练目标, 并设置了 real / shuffled / random EEG 的多重对照, 完成了从``是否能融合''到``融合是否有效''的严格验证. 该阶段产生的 A2 EEG encoder 和 CLIP pooled embedding 融合框架是本文的定量评估核心.
+
+\textbf{第三阶段: VTF token-level fusion（token 级融合）}. A2 的融合发生在 pooled embedding 层, 信息粒度较粗. 为进一步探索更接近原生 VLM 输入层面的 EEG 融合, 本文提出 VTF (Visual-to-EEG Token Fusion), 在 CLIP ViT patch token 层面注入 EEG tokens. 通过 visual-to-EEG cross-attention 生成 EEG-enhanced vision tokens. 该阶段验证了 token-level EEG fusion 的可行性和有效性.
+
+\textbf{第四阶段: Qwen2-VL generative EVLM（生成式 VLM）}. 将 EEG-enhanced vision tokens 作为视觉输入, 通过 adapter 注入 Qwen2-VL-2B-Instruct 生成模型. 采用 LoRA 低秩适配器高效微调, 并通过 best-of-N reranking 提升 caption 质量. 该阶段构建了从 EEG 信号到自由自然语言 caption 的完整通路.
+
+\subsection{系统总体架构}
+
+系统的整体架构如图~\ref{fig:overall-system} 所示. 一条数据流从退化图像和配对 EEG 出发, 经过特征提取、跨模态融合和生成式解码三个阶段, 最终产生自由形式的图像描述文本.
+
+\placeholderfigure{EEG-enhanced VLM 系统总体架构图}{overall-system-placeholder}{4.5cm}
+
+核心数据流描述如下: (1) 退化图像输入经过冻结的 CLIP ViT-B/32 编码器, 产生 pooled image embedding $f_{\mathrm{img}}\in\mathbb{R}^{512}$ 和 visual patch tokens $F_{\mathrm{vis}}\in\mathbb{R}^{B\times50\times512}$; (2) EEG trial 经过 A2 temporal-spectral-spatial encoder, 产生 pooled EEG embedding $f_{\mathrm{eeg}}\in\mathbb{R}^{512}$ 和 EEG tokens $F_{\mathrm{eeg}}\in\mathbb{R}^{B\times4\times512}$; (3) 在语义预测分支中, $f_{\mathrm{img}}$ 与 $f_{\mathrm{eeg}}$ 通过 gated fusion 融合, 与文本原型进行相似度匹配, 产生类别预测; (4) 在 token-level 分支中, $F_{\mathrm{vis}}$ 作为 Query、$F_{\mathrm{eeg}}$ 作为 Key/Value, 通过 VTF cross-attention 生成 enhanced vision tokens; (5) 在生成式分支中, enhanced vision tokens 通过 Qwen2-VL adapter 注入语言模型, 经过 LoRA 微调的解码器生成自然语言 caption.
+
+\subsection{模块划分}
+
+系统由以下核心模块组成, 各模块功能说明见表~\ref{tab:modules}.
+
+\begin{table}[H]
+  \centering
+  \caption{系统模块划分及功能说明}
+  \label{tab:modules}
+  \begin{tabularx}{\linewidth}{l X}
+    \toprule
+    模块名称 & 功能说明 \\
+    \midrule
+    图像编码模块 & 采用冻结的 CLIP ViT-B/32, 提取图像 pooled embedding (512维) 和 visual patch tokens ($B\times50\times512$). 支持 SigLIP backbone 切换. \\
+    EEG 编码模块 & 基于 A2 temporal-spectral-spatial encoder, 从 EEG trial ($B\times64\times250$) 中提取 pooled EEG embedding ($B\times512$) 和 EEG tokens ($B\times4\times512$). 支持 E0--E7、A1--A3、P2 等多种 encoder variant. \\
+    文本原型模块 & 使用 CLIP text encoder 预计算 40 类文本原型向量, 维度 512. 支持灵活更换 prompt 模板. \\
+    Gated Fusion 模块 & 通过门控残差融合公式 $f_{\mathrm{fused}} = f_{\mathrm{img}} + \sigma(g([f_{\mathrm{img}};f_{\mathrm{eeg}}]))\odot\Delta(f_{\mathrm{eeg}})$ 将图像和 EEG 嵌入融合. 门控机制根据图文联合信号动态控制 EEG 注入强度. \\
+    VTF Token Fusion 模块 & 采用 visual-to-EEG cross-attention 将 EEG tokens 融入 visual tokens. Visual tokens 作为 Query, EEG tokens 作为 Key/Value, 输出 enhanced vision tokens. 包含置信度感知门控系数 $\beta$. \\
+    语义预测模块 & 将 fused embedding 与 40 类 text prototypes 进行余弦相似度计算, 输出类别预测. \\
+    生成式 EVLM 模块 & 以 Qwen2-VL-2B-Instruct 为骨干, 将 enhanced vision tokens 注入 LLM decoder, 通过 LoRA ($r=8$) 微调, 生成 free-form caption. \\
+    评价与对照模块 & 对 vision\_only、real\_eeg、shuffled\_eeg、random\_eeg、eeg\_only 五种模式分别统计所有指标, 并输出定性对比示例. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{实验流程}
+
+完整的实验流程如图~\ref{fig:experiment-flow} 所示.
+
+\placeholderfigure{实验流程图}{experiment-flow-placeholder}{4.0cm}
+
+流程分为以下步骤:
+
+(1) \textbf{数据准备}: 下载并解压 Thought2Text EEG 数据（通过 HuggingFace 或 KaggleHub）, 下载并链接 ImageNet 图像, 构建 JSONL manifest 文件. 对 EEG 数据进行降采样（128→64 通道）和标准化.
+
+(2) \textbf{CLIP 预缓存}: 使用 CLIP text encoder 预计算 40 类 text prototypes 并存储; 使用 CLIP ViT 预缓存全量图像 pooled embeddings (512维) 和 visual tokens ($50 \times 512$). 缓存使用 float16 精度存储, 训练时加载为 bfloat16.
+
+(3) \textbf{A2 EEG 对齐训练}: 在 Thought2Text 训练集上训练 A2 EEG encoder, 使用 InfoNCE 对比损失将 EEG 嵌入映射到 CLIP 语义空间. 该阶段产生可复用的 EEG encoder checkpoint.
+
+(4) \textbf{语义预测训练}: 加载 A2 encoder checkpoint, 联合训练 gated fusion 模块和分类模块. 使用 real EEG training, 对六种退化条件 × 五种 EEG 模式进行 full-test 评估.
+
+(5) \textbf{VTF 训练}: 训练 visual-to-EEG cross-attention 模块, 将 EEG tokens 融入 CLIP ViT visual tokens. 验证 token-level fusion 在语义分类任务上的效果, 与 A2 pooled fusion 对比.
+
+(6) \textbf{生成式 EVLM 训练}: 将 enhanced vision tokens 通过 adapter 注入 Qwen2-VL-2B-Instruct. 使用 LoRA ($r=8$, 应用于 Q、V 投影矩阵) 进行参数高效微调. 对比多种训练目标（T1: class-only, T3: class+BLIP caption）和多种 LoRA 配置.
+
+(7) \textbf{全量测试与 reranking}: 对测试集在所有退化条件 × 所有对照模式组合下生成 caption. 对 best checkpoint 进行 best-of-N reranking（$N=5$）, 选取 class-hit 最高的候选项.
+
+(8) \textbf{报告生成}: 汇总各项 metric tables, 挖掘 real EEG 优于 vision/shuffled/random 的 qualitative examples, 生成最终定量和定性报告.
+
+训练环境为单 GPU（NVIDIA RTX 6000 Ada, 48GB 显存）, 使用 bfloat16 混合精度, PyTorch 2.x, CUDA 12.x. 对于 EEG-only 的预训练和对齐训练, 不使用图像, 仅利用预缓存的 CLIP 视觉特征与 EEG 信号之间的对比学习. 所有模型（包括 Qwen2-VL-2B 生成式模型）均在单 GPU 上完成全量训练, 无需多 GPU 分布式训练或 DeepSpeed 框架.

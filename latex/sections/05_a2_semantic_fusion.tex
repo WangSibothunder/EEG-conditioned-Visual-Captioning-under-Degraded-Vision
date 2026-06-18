@@ -1,0 +1,83 @@
+\section{A2 EEG 语义融合模型}
+
+本章详细描述本文的核心定量模型——A2 temporal-spectral-spatial EEG 语义融合模型. A2 模型的设计目标是: 在 CLIP 语义空间中, 充分利用 EEG 信号的时间动态、频谱变化和空间通道分布三类互补信息, 对退化图像的语义表征进行有效补充, 并通过严格的 real / shuffled / random EEG 对照验证 EEG 语义信息的真实性.
+
+\subsection{设计动机}
+
+EEG 信号本质上是一个多维度的时间序列. 对于给定的 EEG trial $e \in \mathbb{R}^{C\times T}$, 其中 $C$ 为通道数（64）, $T$ 为时间采样点数（250）, 至少可以从三个维度提取信息:
+
+\begin{itemize}
+  \item \textbf{时间维度（Temporal）}: 图像呈现后不同时间段内的脑电活动成分（如早期视觉诱发响应的 P100/N170 成分和晚期语义加工的 P300 成分）承载着不同层级的视觉处理信息. 单一尺度的卷积难以同时捕捉快慢变化特征.
+  \item \textbf{频谱维度（Spectral）}: 不同频段（$\alpha, \beta, \gamma$ 等）的 EEG 振荡活动被证明与视觉感知和语义加工相关. 时间域波形不直接反映频域特征, 需要引入频谱分析.
+  \item \textbf{空间/通道维度（Spatial/Channel）}: 64 个电极覆盖了头皮不同区域, 各电极之间的空间关系编码了脑区功能连接的拓扑信息.
+\end{itemize}
+
+单一编码器架构（如纯卷积或纯 Transformer）通常只能建模其中一到两个维度的信息. 例如, 纯时序卷积擅长捕捉局部时间模式但忽略了通道间关系; 频谱 CNN 从时频域提取特征但丧失了原始时间拓扑. 因此, A2 的设计理念是\textbf{三支路并行编码、后融合}, 在不增加参数规模的前提下充分挖掘 EEG 的多维度信息.
+
+\subsection{A2 EEG Encoder 结构}
+
+A2 EEG encoder 由三个独立分支组成, 如图~\ref{fig:a2-encoder} 所示.
+
+\placeholderfigure{A2 temporal-spectral-spatial EEG encoder 结构图}{a2-encoder-placeholder}{5.0cm}
+
+\textbf{Temporal 分支:} 采用 multiscale ConvTransformer 架构. 首先使用四个不同卷积核尺寸 ($k \in \{3, 7, 15, 31\}$) 的 Conv1d 并行提取多尺度时间特征, 将各支路输出拼接后通过 $1\times1$ 卷积混合, 再经过 4 层 Transformer Encoder 建模长程时序依赖. 输出通过 learnable attention pooling 聚合为单向量, 经 MLP 投影为 512 维 temporal embedding. 该分支的 multiscale 设计使模型能同时捕捉毫秒级的尖峰变化和跨越数百毫秒的慢变趋势.
+
+\textbf{Spectral 分支:} 基于可微分 STFT（Short-Time Fourier Transform）的频谱 CNN. 首先对 EEG 信号施加 STFT（窗长 $n_{\mathrm{fft}}=64$, hop length $=16$）, 得到时频谱图. 对幅度谱取 $\log(1+|X|)$ 变换并进行逐通道标准化后, 通过两层 2D CNN（Conv2d + BatchNorm + GELU）提取频域空间特征. 经过 AdaptiveAvgPool2d 全局池化后, 通过 MLP 投影为 512 维 spectral embedding. STFT 在 float32 精度下计算以保证数值稳定, 频谱图参与 bfloat16 混合精度训练.
+
+\textbf{Spatial/Channel 分支:} 将 EEG 信号转置后, 每个电极通道的 250 维时间序列通过线性层投影为 hidden\_dim 维 token（$64 \times 256$）, 经 learnable attention pooling 加权, 再经 MLP 输出 512 维 spatial embedding. 该分支通过自注意力机制学习电极间的功能连接模式, 无需预定义通道图结构.
+
+\textbf{后融合（Late Fusion）:} 三个分支的输出 temporal embedding、spectral embedding 和 spatial embedding（各 512 维）在 channel 维度拼接为 1536 维向量, 经过 2 层 Transformer Encoder 进行跨分支交互融合. 由于三个 embedding 来自不同的特征空间, 融合 Transformer 为每个分支添加了可学习的 branch type embedding, 帮助模型区分特征来源. 最终通过 attention pooling 和 MLP 投影器输出 512 维融合 EEG embedding $f_{\mathrm{eeg}}$.
+
+\subsection{CLIP Semantic Prototype 构建}
+
+为了实现受约束的语义分类, 本文利用 CLIP text encoder 构建类别文本原型. 对于 Thought2Text 的 40 个类别, 为每类构造文本 prompt $t_c =$ ``a photo of a \{class\_name\}''~\cite{radford2021learning}. 所有 prompt 经冻结的 CLIP text encoder 处理后得到 text prototypes $P = \{p_c\}_{c=1}^{40}$, 其中 $p_c = f_{\mathrm{text}}(t_c) \in \mathbb{R}^{512}$, 并经过 L2 归一化. 文本原型在训练期间保持冻结, 且仅在模型初始化时计算一次.
+
+给定输入, A2 模型输出 L2 归一化的融合 EEG embedding $f_{\mathrm{fused}}$, 通过余弦相似度与所有文本原型比较:
+
+\begin{equation}
+  \hat{y} = \arg\max_{c} \frac{f_{\mathrm{fused}}^\top p_c}{\|f_{\mathrm{fused}}\|\,\|p_c\|}
+\end{equation}
+
+该公式本质上实现了零样本分类——模型只需将输入映射到正确的类别原型方向, 而不需要学习固定的类别映射矩阵. 这一设计的优势是: CLIP text encoder 天然具备开放词汇的语义理解能力, 类别原型之间的语义距离（如``canoe''与``boat''的相似性）被保留在原型空间中.
+
+\subsection{EEG-image Semantic Fusion}
+
+在退化图像输入场景中, 视觉编码器提取的图像 embedding $f_{\mathrm{img}}$ 因退化处理而变得不可靠. A2 通过 gated residual fusion 将 EEG embedding 作为残差修正项注入:
+
+\begin{equation}
+  f_{\mathrm{fused}} = f_{\mathrm{img}} + \sigma\left(g\left([f_{\mathrm{img}}; f_{\mathrm{eeg}}]\right)\right) \odot \Delta(f_{\mathrm{eeg}})
+\end{equation}
+
+其中 $g(\cdot)$ 是门控网络（2 层 MLP, hidden dim = 1024, 输出 dim = 512）, $\sigma$ 为 sigmoid 激活函数, $\Delta(\cdot)$ 为 EEG 残差变换网络（LayerNorm + 2 层 MLP）. $[\cdot;\cdot]$ 表示通道维拼接.
+
+门控机制的关键作用是\textbf{根据图像和 EEG 的联合信息动态控制 EEG 注入强度}. 当图像质量较好时, CLIP visual embedding 已足够可靠, 门控系数趋于 0, 减少 EEG 的干预; 当图像退化严重时, 门控系数增大, EEG 信息以更强的权重注入. 这一机制使融合过程具有输入自适应性.
+
+融合后的 $f_{\mathrm{fused}}$ 与冻结的 CLIP text prototypes 计算相似度, 通过 softmax 得到 40 类预测概率.
+
+\subsection{训练目标}
+
+A2 语义融合模型的训练采用以下损失函数:
+
+\textbf{分类损失（Cross-Entropy）}: 主训练目标为标准的交叉熵分类损失:
+
+\begin{equation}
+  \mathcal{L}_{\mathrm{CE}} = -\frac{1}{B} \sum_{i=1}^{B} \log \frac{\exp(s_{i, y_i} / \tau)}{\sum_{c=1}^{K} \exp(s_{i, c} / \tau)}
+\end{equation}
+
+其中 $s_{i,c} = \cos(f_{\mathrm{fused},i}, p_c)$ 是第 $i$ 个样本的融合嵌入与第 $c$ 类文本原型之间的余弦相似度, $y_i$ 为真实类别, $\tau$ 为可学习的温度参数.
+
+\textbf{对比对齐损失（Optional InfoNCE）}: 可选项为在融合嵌入与类别文本原型之间施加 InfoNCE 对比损失, 鼓励同一类的融合嵌入聚集在正确的文本原型周围.
+
+训练中, \textbf{模型仅使用 real EEG 数据进行参数更新}. Shuffled EEG 和 random EEG 模式仅用于测试时对照评估, 不参与训练. 这一设置保证了: 模型学到的 EEG 利用能力完全来自真实配对信号, 而非任何形式的数据增强或噪声注入.
+
+训练超参数方面, 采用 AdamW 优化器, 初始学习率 $1\times10^{-4}$, 权重衰减 $0.01$, 批大小 64, 使用 cosine 学习率衰减策略. 为降低小样本下的过拟合风险, EEG encoder 中的 dropout rate 设为 $0.2$, 并在 fusion MLP 中施加 LayerNorm 正则化.
+
+\subsection{多分支消融与模型选择}
+
+A2 的三个分支并非同等重要. 本文在实验阶段进行了单分支和双分支的消融实验（详见第 8 章）. 实验发现: temporal 分支提供了最基础的时序分类能力; spectral 分支在强噪声退化条件下的贡献最大; spatial 分支对类别内个体差异的鲁棒性有帮助. 三支路融合在 most conditions 下获得最好的综合性能.
+
+此外, 本文还对比了 A2 与多种 EEG encoder variant（E0--E7, P2, A1, A3 等）在语义预测任务上的有效性. 详细的对比结果和选择理由在第 8 章实验部分给出.
+
+\subsection{模型小结}
+
+A2 temporal-spectral-spatial EEG encoder 是本文用于退化图像语义预测的核心定量模型. 其设计特点可总结为: (1) 三支路并行编码, 分别捕获 EEG 的时间、频谱和空间互补信息; (2) gated residual fusion 根据输入质量动态调节 EEG 辅助强度; (3) CLIP text prototypes 提供受约束的语义空间, 避免自由生成的不稳定性; (4) real / shuffled / random EEG 严格对照验证 EEG 语义辅助的客观性. A2 在 all six degradation conditions 下的三种子评估中均稳定优于 vision-only 和 shuffled/random EEG 基线.

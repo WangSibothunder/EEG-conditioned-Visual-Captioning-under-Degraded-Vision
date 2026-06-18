@@ -1,0 +1,53 @@
+\section{Token-level EEG-enhanced VLM}
+
+A2 模型的 EEG 融合发生在 pooled embedding 层面, 融合后的单个 512 维向量丢弃了视觉的空间位置信息. 为了更接近原生 VLM 的输入模式, 本章提出 VTF (Visual-to-EEG Token Fusion) 方法, 在 CLIP ViT patch token 层面注入 EEG 信息, 生成 EEG-enhanced vision tokens.
+
+\subsection{从 Embedding-level 到 Token-level 的动机}
+
+A2 在语义分类任务上取得了最强的定量结果（详见第 8 章）, 但其融合方式存在固有限制: pooled fusion 将整个图像的视觉信息压缩为单个向量, 与 EEG embedding 融合后同样输出单个向量. 对于生成式 VLM 而言, 语言解码器期望输入是 token 序列而非单一向量, 因为 token 序列保留了视觉信息的空间结构, 有利于模型对图像中不同区域的对象进行细粒度描述. 此外, EEG 信号对不同图像区域的语义内容可能具有差异化的响应——例如, 被试看``canoe''类图像时, 运动皮层和枕叶视觉区域的 EEG 模式可能与观看``golf ball''时有显著不同. Token-level fusion 可以通过注意力机制让每个 visual patch token 选择性关注不同的 EEG token, 实现更加精细的跨模态交互.
+
+因此, 本文进一步探索: 在不显著增加模型复杂度的情况下, 能否在 CLIP ViT visual tokens 上附加 EEG 信息, 得到 EEG-enhanced vision tokens, 使这些 token 可以直接输入生成式 VLM?
+
+\subsection{CLIP ViT Visual Tokens 提取}
+
+CLIP ViT-B/32 将输入 $224\times224$ 的图像分割为 $7\times7$ 个 patch（每个 patch 大小为 $32\times32$）. 经过 ViT encoder 处理后, 输出 50 个 visual tokens（1 个 CLS token + 49 个 patch tokens）, 每个 token 维度为 512: $F_{\mathrm{vis}} \in \mathbb{R}^{B\times 50\times 512}$.
+
+与 pooled embedding 不同的是, 这 50 个 token 保留了图像不同空间位置的特征信息. CLS token 通常聚合了全局语义信息, 49 个 patch tokens 编码了局部区域特征. 在生成式 VLM 中, 通常使用 patch tokens（或 CLS + patch tokens 的组合）作为视觉输入, 因为语言 decoder 需要对不同区域的视觉内容进行 attention.
+
+\subsection{EEG Tokenizer 设计}
+
+A2 EEG encoder 输出的 pooled EEG embedding $f_{\mathrm{eeg}}\in\mathbb{R}^{512}$ 仅是一个向量. 为了使其能与 50 个 visual tokens 进行 token-level 交互, 需要将单个 EEG embedding 扩展为 EEG token 序列. 本文设计了一个轻量级的 EEG tokenizer: 将 512 维 EEG embedding 通过 4 个并行可学习的线性投影器（或位置编码加权的扩展模块）映射为 4 个 EEG tokens, 每个 token 维度仍为 512: $F_{\mathrm{eeg}} \in \mathbb{R}^{B\times 4\times 512}$.
+
+选择 4 个 EEG tokens 是基于以下经验考量: 过多的 EEG tokens 会使 cross-attention 趋向于让视觉 tokens 完全依赖 EEG 信号, 忽略了视觉本身的信息; 过少的 EEG tokens 则无法提供足够的信息多样性. 实验中, 4 个 tokens 在效率和效果之间取得了最佳平衡.
+
+\subsection{Visual-to-EEG Cross-Attention}
+
+VTF 的核心是 visual-to-EEG cross-attention 模块, 其结构如图~\ref{fig:vtf} 所示. 在该模块中, visual tokens 作为 Query, EEG tokens 作为 Key 和 Value:
+
+\begin{equation}
+  F_{\mathrm{enhanced}} = F_{\mathrm{vis}} + \beta \cdot \mathrm{CrossAttention}(Q = F_{\mathrm{vis}}, K = F_{\mathrm{eeg}}, V = F_{\mathrm{eeg}})
+\end{equation}
+
+\placeholderfigure{VTF visual-to-EEG cross-attention 结构图}{vtf-cross-attention-placeholder}{4.2cm}
+
+其中 CrossAttention 为标准的多头交叉注意力（$h=8$）, $\beta$ 为置信度感知门控系数. $\beta$ 的计算方式为:
+
+\begin{equation}
+  \beta = \gamma \cdot \sigma\left(W_\beta [\mathrm{pool}(F_{\mathrm{vis}}); \mathrm{pool}(F_{\mathrm{eeg}})] + b_\beta\right)
+\end{equation}
+
+其中 $\mathrm{pool}(\cdot)$ 表示沿 token 维度的平均池化, $\gamma$ 为可训练的缩放因子（初始化为 0.1, 训练初期抑制 EEG 的注入以避免不稳定的梯度）. 门控机制使模型能够根据视觉输入的质量动态控制 EEG 的信息注入程度: 视觉清晰时 $\beta$ 较小, 退化严重时 $\beta$ 增大.
+
+经过 VTF 融合后, $F_{\mathrm{enhanced}} \in \mathbb{R}^{B\times 50\times 512}$ 保持了与原始 visual tokens 相同的形状, 因此可以与任何接受 CLIP ViT visual tokens 的下游模型兼容.
+
+\subsection{VTF 分类验证}
+
+为了验证 VTF 融合后的 enhanced vision tokens 是否携带了有用的 EEG 信息, 本文首先在分类任务上进行验证: 将 $F_{\mathrm{enhanced}}$ 进行平均池化得到 pooled vector, 然后与 CLIP text prototypes 计算相似度进行零样本分类. 该方法与 A2 的评估方式一致, 确保公平比较.
+
+实验结果（详见第 8 章）表明: VTF 在多项退化条件下的 real EEG 表现优于 vision-only、shuffled EEG 和 random EEG, 验证了 token-level EEG fusion 的可行性. 然而, VTF 的总体分类 accuracy 仍低于 A2 的 pooling-level fusion. 这一结果是可以理解的: A2 使用 gated residual fusion 在专门的融合网络中整合图像和 EEG 嵌入, 而 VTF 仅使用一次 cross-attention 操作, 融合网络的设计复杂度和信息交互深度都不如 A2.
+
+尽管如此, VTF 的核心价值在于: 它是通往生成式 EVLM 的关键中间步骤. 如果没有 token-level enhanced vision tokens, 下一步将 pooled embedding 直接输入语言 model decoder 与 visual token 序列输入 decoder 相比会有显著的信息损失.
+
+\subsection{模型小结}
+
+VTF 是 A2 与生成式 EVLM 之间的桥梁: 它在保持 CLIP ViT visual tokens 形状的前提下, 通过 lightweight cross-attention 将 EEG 信息融合到每个 visual token 中. 虽然 VTF 的分类性能不如 A2, 但其产生的 enhanced vision tokens 可以直接输入生成式 VLM, 为第 7 章的生成式 EVLM 设计奠定了基础.

@@ -1,0 +1,46 @@
+\section{绪论}
+
+\subsection{研究背景}
+
+近年来，视觉语言模型（Vision-Language Model, VLM）取得了显著进展。以 CLIP~\cite{radford2021learning} 为代表的对比式双塔模型首次展示了大规模图文对齐学习的可行性，将图像和文本映射到统一的语义空间；BLIP-2~\cite{li2023blip2}、LLaVA~\cite{liu2024llava}、Qwen-VL~\cite{bai2023qwen} 等生成式视觉语言模型进一步将视觉编码器与大语言模型（Large Language Model, LLM）连接，实现了图像描述、视觉问答和跨模态推理等能力。这些模型已在图像分类、图文检索、零样本识别等任务中展现出强大的性能，并被广泛应用于自动驾驶、医疗影像分析、智能安防监控和增强现实等领域。
+
+然而，当前视觉语言模型高度依赖于输入图像的质量。在现实场景中，图像常因光照不足、运动模糊、传感器噪声、遮挡或分辨率低等因素出现视觉退化（visual degradation）。当图像质量显著下降时，视觉编码器提取的语义特征会变得不可靠，从而导致下游的语义判断和文本生成产生偏差甚至错误。例如，自动驾驶系统在雨雾天气下对交通标志的识别能力可能显著降低；医学影像中的噪声和伪影可能导致诊断辅助系统产生不可靠的推理。如何提升视觉退化条件下的多模态理解能力，是视觉语言模型走向鲁棒应用需要解决的关键问题之一。
+
+脑电图（Electroencephalography, EEG）记录了被试在观看图像时大脑皮层产生的电生理活动。相比于行为反应或口头报告，EEG 信号具有毫秒级的时间分辨率，能够捕捉视觉感知过程中快速的神经活动变化。已有研究表明，人类在观看视觉刺激时的 EEG 信号包含了可解码的视觉语义信息~\cite{gifford2023alanet}，在物体类别识别、图像检索和概念解码等任务中均有成功探索~\cite{spampinato2017deep,kavasidis2017spatio}。基于此，一个值得研究的问题是：当视觉输入质量受损时，EEG 信号中蕴含的神经语义表征能否作为一种辅助信号，帮助视觉语言模型恢复或增强对图像语义的理解能力？
+
+然而，EEG 信号本质上具有低信噪比、个体差异大、trial 级别数据量小的特点。直接将 EEG 映射到自由形式自然语言文本在数据规模和信号稳定性上均面临极大挑战——现有的 EEG-image 配对数据集规模远小于典型的 VLM 图文预训练数据量, 且 EEG 数据中试次间差异大, 信号模式复杂。因此，本文并不追求``脑电直接读取语言''这一宏大目标，而是将研究定位为：\textbf{在小样本 EEG-image 配对数据条件下，研究真实 EEG 信号是否能在视觉退化条件下为视觉语言模型提供辅助语义增强信息}。具体而言，本文假设 EEG 记录了观察者大脑中关于图像内容的额外神经表征，这些表征虽然不完全，但在视觉输入质量不足时可能提供有益的信息补充。
+
+\subsection{研究意义}
+
+本文的研究意义可从以下三个层面理解：
+
+\textbf{理论意义}：探索脑信号与视觉语言语义空间之间的对齐关系是多模态学习和计算神经科学交叉领域的前沿问题。本文通过系统比较真实配对 EEG、打乱 EEG 和随机 EEG 在视觉退化条件下的语义增强效果，为``EEG 是否携带可机器利用的视觉语义信息''这一问题提供经验性证据。本研究并不假设 EEG 能够完整编码任意视觉概念，而是聚焦于小样本数据条件下的语义辅助能力，这一设定更贴近当前 EEG 视觉解码技术的实际水平。
+
+\textbf{工程意义}：视觉退化在实际应用中普遍存在——医疗影像可能受噪声干扰、自动驾驶视觉可能因天气条件退化、监控系统可能面临低分辨率和遮挡。实现 EEG 辅助的鲁棒视觉语义理解，在脑机接口（Brain-Computer Interface, BCI）、辅助视觉系统、人机协同感知等场景具有潜在应用价值。本文构建的系统原型为后续更大规模的数据训练和更复杂的脑-视觉融合任务提供了技术验证。
+
+\textbf{课程设计意义}：本课题综合运用了深度学习基础、多模态融合架构设计、预训练视觉语言模型的使用与适配、参数高效微调技术（LoRA）、对比学习、图像增强与退化建模，以及生成式语言模型等核心技术模块. 课程设计过程中，项目从问题定义、数据组织、模型设计、训练调参到对照实验和结果分析, 形成了完整的研究闭环, 有助于全面锻炼工程实践和科学研究能力. 此外，课题要求学生完成从文献调研、方法设计、代码实现、实验评估到报告撰写的全流程工作，是知识综合运用和工程能力训练的综合性课程设计项目.
+
+\subsection{国内外研究现状简述}
+
+\textbf{视觉语言模型}：自 CLIP 提出以来, 视觉语言模型大致沿两条路线发展. 一是以 CLIP、SigLIP~\cite{zhai2023sigmoid} 为代表的对比式双塔模型, 通过大规模图文对比学习实现强大的零样本泛化能力; 二是以 LLaVA、Qwen-VL、BLIP-2 为代表的生成式 VLM, 将视觉特征注入冻结的或微调的大语言模型, 实现面向多模态输入的自由文本生成. 两类模型的核心差异在于, 前者只有编码器, 输出语义嵌入, 方便用于跨模态检索和零样本分类; 后者包含解码器, 支持面向图像输入的文本生成和对话交互.
+
+\textbf{EEG 视觉解码研究}：将 EEG 与视觉语义解码结合的研究已有多年历史. Spampinato 等人~\cite{spampinato2017deep} 首次使用深度学习从 EEG 信号中解码视觉内容, 在图像分类任务上取得突破. 后续研究包括从 EEG 中重建视觉刺激、EEG-image retrieval 和跨被试 EEG 分类等方向~\cite{palazzo2017decoding,tirupattur2018thoughtviz}. 近年来, EEG-to-CLIP 对齐学习~\cite{du2023eegclip} 和 EEG-based image generation 等工作也逐步出现. 然而, 这些研究大多在完整可辨识的视觉输入条件下进行, 视觉退化场景下的 EEG 语义辅助作用尚未得到充分的系统性研究.
+
+\textbf{EEG 与视觉语言模型结合}：近年来开始出现将 EEG 与预训练 VLM 结合的工作. EEG-ImageNet~\cite{palazzo2017decoding} 和 THINGS-EEG2~\cite{hebron2024things} 等数据集构建了大规模 EEG 刺激-响应对齐体系, 为数据驱动的 EEG-VLM 研究提供了基础. 部分研究探索了 EEG-to-CLIP embedding 的对齐学习和 EEG-conditioned image generation. 然而, 在视觉退化条件下将 EEG 作为 VLM 辅助语义增强信号, 并系统设置 real/shuffled/random EEG 对照的严格验证范式, 现有文献中仍较为欠缺. 本文正是针对这一空白开展研究.
+
+\textbf{参数高效微调（LoRA）}：LoRA~\cite{hu2022lora} 通过在注意力层的权重矩阵中添加低秩可训练分支来实现高效的大模型微调, 极大降低了训练成本和显存需求. 在本文中, LoRA 用于在冻结的 Qwen2-VL 生成模型上适配 EEG-enhanced vision tokens, 使得小样本场景下的生成式训练成为可能. 使用 LoRA 进行微调而非全参数调整, 也是本文项目在单 GPU 环境下完成多种生成式路线对比的重要工程前提.
+
+\subsection{本文主要工作}
+
+本文在 Thought2Text/EEGCVPR 数据集~\cite{tirupattur2018thoughtviz} 上构建视觉退化条件下的 EEG 辅助视觉语言理解系统, 主要完成以下工作:
+
+\begin{enumerate}
+  \item 构建视觉退化条件下 EEG-assisted semantic recognition 与 generative captioning 统一任务框架, 系统设计了 vision-only、real EEG、shuffled EEG 和 random EEG 多种对照模式;
+  \item 设计并实现 A2 temporal-spectral-spatial EEG 语义融合模型, 在六种视觉退化条件下完成多种子定量评估, 验证真实 EEG 对退化图像语义识别的提升作用;
+  \item 提出并实现 VTF token-level EEG-enhanced VLM, 将 EEG tokens 通过 visual-to-EEG cross-attention 机制融合进 CLIP ViT visual tokens, 得到 EEG-enhanced vision tokens;
+  \item 构建 Route5 Qwen2-VL based generative EVLM 原型, 以 EEG-enhanced vision tokens 作为视觉输入, 结合 LoRA 参数高效微调和 best-of-N reranking 策略, 实现自由形式 caption 生成, 并进行 real/shuffled/random EEG 和 vision-only 对照实验.
+\end{enumerate}
+
+\subsection{章节安排}
+
+本文共分为十章. 第1章为绪论; 第2章介绍相关技术与理论基础, 包括视觉语言模型、CLIP 语义空间、EEG 视觉解码、视觉退化建模、多模态融合方法和 LoRA; 第3章介绍数据集与任务定义; 第4章阐述系统总体设计; 第5章详细描述 A2 EEG 语义融合模型; 第6章介绍 VTF token-level EEG-enhanced VLM; 第7章阐述生成式 EVLM 的设计与实现; 第8章给出完整的实验结果与分析; 第9章总结工程实现与代码结构; 第10章进行总结与展望.
