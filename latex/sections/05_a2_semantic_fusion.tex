@@ -40,9 +40,19 @@ CLIP 文本原型沿用第 2 章所述方法：对 40 个类别各构造 prompt 
 
 \subsection{训练设计}
 
-A2 语义融合模型的训练以交叉熵分类损失为主要目标，仅在真实配对 EEG 数据上更新参数。Shuffled EEG 和 random EEG 仅用于测试时对照评估，不参与训练。这一设置保证了模型学到的 EEG 利用能力完全来自真实配对的神经信号。
+A2 语义融合模型的训练以交叉熵分类损失为主要目标。给定融合嵌入 $f_{\mathrm{fused}}$ 和 40 类文本原型 $\{p_c\}_{c=1}^{40}$，分类预测通过对余弦相似度施加 softmax 得到：
 
-训练采用 AdamW 优化器，初始学习率 $1\times10^{-4}$，权重衰减 0.01，批大小为 64，使用 cosine 学习率衰减。为降低小样本过拟合风险，EEG encoder 的 dropout rate 设为 0.2。
+\begin{equation}
+  \mathcal{L}_{\mathrm{CE}} = -\frac{1}{B} \sum_{i=1}^{B} \log \frac{\exp(\tau^{-1} \cos(f_{\mathrm{fused},i}, p_{y_i}))}{\sum_{c=1}^{K} \exp(\tau^{-1} \cos(f_{\mathrm{fused},i}, p_c))}
+\end{equation}
+
+其中 $\tau$ 为可学习的温度参数，$y_i$ 为第 $i$ 个样本的真实类别标签。
+
+模型的参数更新仅在真实配对 EEG 数据上进行。Shuffled EEG 和 random EEG 仅用于测试时对照评估，不参与训练。这一训练-评估分离策略是实验设计的核心：如果 shuffled/random EEG 也参与训练，模型可能学会利用 EEG 通道中的任意噪声模式而非语义信息。通过仅用 real EEG 训练、用全部四种 EEG 模式评估，保证了学到的 EEG 利用能力完全来自真实配对的神经信号。
+
+训练采用 AdamW 优化器，初始学习率 $1\times10^{-4}$，权重衰减 0.01。批大小为 64（在单 GPU 上通过梯度累积等效实现），使用 cosine 学习率衰减策略，最低学习率为初始值的 $1/100$。为降低小样本下的过拟合风险，EEG encoder 中的 dropout rate 设为 0.2，gated fusion MLP 中施加 LayerNorm 正则化。总计训练 80 个 epoch，在验证集的 top-1 accuracy 上进行早停选择，patience 设为 25 个 epoch。
+
+A2 encoder 的训练通常分为两个阶段。第一阶段为 EEG-to-CLIP 预对齐：在冻结的 CLIP 语义空间中，使用 InfoNCE 对比损失将 EEG embedding 推向与对应图像的 CLIP embedding 接近的位置。这一对齐预训练为后续的融合训练提供了良好的初始化，因为此时 EEG embedding 已经包含了粗略的视觉语义信息。第二阶段为语义融合训练：加载对齐阶段的 checkpoint，联合训练 gated fusion 模块和可选的分类头，使用上述 CE 损失进行优化。在第二阶段中，CLIP ViT 和 CLIP text encoder 保持完全冻结，仅更新 A2 EEG encoder、gated fusion 和温度参数 $\tau$。
 
 \subsection{模型验证方法}
 
