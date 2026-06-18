@@ -1,0 +1,94 @@
+\section{数据集与任务定义}
+
+本章介绍实验使用的数据集、预处理方法、数据划分策略、任务定义和评价指标。
+
+\subsection{数据集介绍}
+
+本课程设计使用 Thought2Text 数据集。该数据集由 6 名健康被试参与，每位被试观看了 40 个 ImageNet 类别的自然图像，在观看过程中同步采集 128 通道 EEG 信号。数据集中的 EEG trial 约为 11965 条，对应约 1996 张不同图像。EEG 经过降采样处理后为 64 通道、250 个时间采样点，形状为 $[64, 250]$。图像以 $224\times224$ 分辨率输入模型。
+
+值得说明的是，Thought2Text 是一个 EEG-image 配对数据集，其原始标注形式为类别标签而非自然语言图像描述。这意味着该数据集更适合 EEG-image 类别语义学习，而非直接的 EEG-to-text 生成训练。本课程设计在类别标签基础上，使用预训练 BLIP-base 模型为各图像生成伪描述文本，作为后续生成式模型的训练目标。
+
+数据集的基本信息如表~\ref{tab:dataset} 所示。
+
+\begin{table}[htbp]
+  \centering
+  \caption{Thought2Text 数据集基本信息}
+  \label{tab:dataset}
+  \begin{tabular}{l c}
+    \toprule
+    项目 & 数值 \\
+    \midrule
+    图像总数 & 约 1996 张 \\
+    EEG trial 总数 & 约 11965 条 \\
+    类别数 & 40 个 \\
+    被试数 & 6 名 \\
+    EEG 形状 & $64\times250$ \\
+    图像输入分辨率 & $224\times224$ \\
+    原始 EEG 通道数 & 128 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{数据预处理}
+
+数据预处理包括 EEG 处理、图像处理和文本处理三个环节。
+
+\textbf{EEG 预处理}：原始 EEG 从 128 通道降采样到 64 通道，逐通道进行 z-score 标准化。所有 EEG trial 长度统一为 250 个采样点。为减少训练时的磁盘 I/O，将全部训练、验证和测试集的 EEG 数据预缓存为 numpy 数组格式，训练时直接从内存缓存加载。
+
+\textbf{图像处理}：统一使用 CLIP ViT-B/32 的预处理流程（Resize 到 $224\times224$、CenterCrop、ImageNet 标准化）。为降低计算开销，全量图像的 CLIP 视觉特征（pooled embedding 和 patch tokens）均预先计算并缓存为 float16 精度的 .npy 文件，训练时加载并转换为 bfloat16。
+
+\textbf{文本处理}：为 40 个类别分别构造 prompt ``a photo of a \{class\_name\}''，通过冻结的 CLIP text encoder 得到 512 维文本原型向量，预计算后存储，训练和评估期间不再更新。
+
+\textbf{视觉退化生成}：六种退化条件在数据加载过程中在线施加，不需要预存储退化图像。退化变换基于 torchvision 标准算子实现，在 DataLoader 的 worker 进程中执行。
+
+\subsection{数据划分}
+
+数据划分采用 image-level split 方案，即按照图像 ID 而非 trial ID 进行划分。这一方案的核心目的是防止信息泄漏：如果采用 trial-level split，同一张图像的不同 trial 可能散布在训练集和测试集中，模型可能依赖记忆图像视觉特征进行分类，而非学习利用 EEG 语义信息。image-level split 保证了训练集和测试集之间不存在共享图像。
+
+具体划分情况见表~\ref{tab:split}。验证集用于模型选择和早停判断，测试集仅用于最终评估。
+
+\begin{table}[htbp]
+  \centering
+  \caption{数据集训练/验证/测试划分}
+  \label{tab:split}
+  \begin{tabular}{l c c c}
+    \toprule
+    划分 & 图像数 & EEG trial 数 & 类别数 \\
+    \midrule
+    训练集 & 1330 & 7970 & 40 \\
+    验证集 & 333 & 1998 & 40 \\
+    测试集 & 333 & 1997 & 40 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{任务定义}
+
+本课程设计围绕两个核心任务展开。
+
+\textbf{任务一：EEG 辅助语义预测}。给定退化图像和对应的 EEG trial，模型输出对 40 个类别的预测概率分布。该任务的目标是验证真实配对 EEG 能否在视觉退化条件下提升对图像类别的判断能力。评估时设置 vision-only、real EEG、shuffled EEG、random EEG 和 eeg-only 五种输入模式。
+
+\textbf{任务二：生成式图像描述}。给定退化图像和对应的 EEG trial，模型生成一段自然语言描述文本。该任务的目标是验证 EEG-enhanced 视觉表示能否使生成式视觉语言模型产生比纯视觉输入更准确的描述。评估设置 vision-only、real EEG、shuffled EEG 和 random EEG 四种模式。
+
+\subsection{评价指标}
+
+\textbf{语义预测指标}：
+
+\begin{itemize}
+  \item \textbf{Top-1 Accuracy}：模型预测的最高概率类别与真实类别一致的比例；
+  \item \textbf{Top-5 Accuracy}：真实类别位于预测前 5 类别中的比例；
+  \item \textbf{Class Hit}：通过 CLIP 文本原型相似度进行零样本类别判定，命中真实类别的比率；
+  \item \textbf{Real-Vision Gap}：real EEG 与 vision-only 的指标差值，正值表示 EEG 提供了正向辅助；
+  \item \textbf{Real-Shuffled/Random Gap}：real EEG 与 shuffled/random EEG 的差值，是判断 EEG 效果是否来自真实配对的关键对照指标；
+  \item \textbf{Win Rate}：在多种退化条件或随机种子中，real EEG 超过对照组的比例。
+\end{itemize}
+
+\textbf{生成式指标}：
+
+\begin{itemize}
+  \item \textbf{有效输出率（Valid Caption Rate）}：生成文本中合法有效描述的比例。有效描述定义为非空、非纯乱码、非代码片段和非 URL 的文本；
+  \item \textbf{无效输出率（Invalid Output Rate）}：生成文本无效的比例；
+  \item \textbf{Caption Class-Hit}：对生成描述进行 CLIP 零样本类别判定，命中真实类别的比率；
+  \item \textbf{Distinct Caption Count}：生成的不同描述文本总数，反映输出多样性；
+  \item \textbf{平均描述长度（Avg Caption Length）}：生成描述的平均 token 数。
+\end{itemize}

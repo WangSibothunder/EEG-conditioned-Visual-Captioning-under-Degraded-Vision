@@ -1,0 +1,21 @@
+\section{总结与展望}
+
+\subsection{工作总结}
+
+本文构建了视觉退化条件下 EEG 辅助视觉语言模型的语义识别与生成式描述系统。在 Thought2Text 小样本 EEG-image 数据集上，完成的主要工作包括：
+
+\textbf{(1) A2 EEG 语义融合模型}。设计了三支路 temporal-spectral-spatial EEG 编码器和门控残差融合机制，在 CLIP 语义空间中实现 EEG 对退化图像的多维度语义补充。在 3 种子 × 6 退化条件的 18 组评估中，真实 EEG 的 top-1 accuracy 在所有条件下均显著优于 vision-only、shuffled EEG 和 random EEG，验证了 EEG 作为视觉语义增强信号的有效性。
+
+\textbf{(2) VTF token-level 视觉增强}。在 CLIP ViT visual token 层面通过 visual-to-EEG cross-attention 实现 EEG 信息的注入，使 EEG 不再仅作为分类器前的拼接向量，而是参与视觉 token 表示的增强过程。
+
+\textbf{(3) 生成式视觉语言模型}。将 EEG-enhanced vision tokens 接入 Qwen2-VL-2B-Instruct 生成模型，使用 LoRA 进行参数高效微调，在强退化条件下实现了 97.8\% 的有效输出率，real EEG 的 caption class-hit 较 vision-only 提升约 8.4 个百分点。
+
+\subsection{主要贡献}
+
+本文方法层面的贡献包括：提出了 A2 temporal-spectral-spatial EEG encoder 的多维度并行编码架构；设计了 confidence-aware gating 机制实现 EEG 注入的动态调节；通过 VTF token-level fusion 将 EEG 信息从 pooled embedding 层推进到 visual token 层。实验方法层面的贡献在于通过 shuffled EEG 和 random EEG 的严格对照设计，为 EEG 语义辅助效果的归因提供了可靠的实验基础。
+
+\subsection{局限与未来方向}
+
+本文的方法和实验存在几个局限性。数据方面，Thought2Text 仅包含 40 个类别，样本量和类别多样性远小于典型的 VLM 训练集。方法方面，VTF 仅使用一次 cross-attention，EEG 与视觉信息的交互深度有限；生成式模型的训练目标依赖 BLIP 伪标注，质量受限于伪标注的准确性。此外，本文未对 EEG 的个体差异进行建模。
+
+未来的研究方向包括：(1) 在更大规模的 EEG-image-text 数据集上进行预训练和迁移学习；(2) 引入 subject adaptation 模块降低跨被试变异性；(3) 使用 multi-layer Perceiver 或 Q-Former 替代当前的 single cross-attention 进行 token fusion；(4) 探索直接使用人工标注的 caption 数据训练生成式模型，以突破伪标注的质量上限。

@@ -1,0 +1,25 @@
+\section{总结与展望}
+
+\subsection{课程设计工作总结}
+
+本课程设计围绕视觉退化条件下 EEG 辅助视觉语言模型的语义识别与图像描述生成任务，在 Thought2Text 数据集上完成了从方法设计、模型实现、训练调参到评估验证的完整实践。主要工作成果包括：
+
+\textbf{(1) 构建了视觉退化条件下 EEG 辅助语义识别的实验框架}。设置了六种退化条件（clean、lowres16、strong\_blur、strong\_noise、occlusion50、mixed）和五种 EEG 对照模式（real EEG、vision-only、shuffled EEG、random EEG、eeg-only），采用 image-level split 防止数据泄漏。
+
+\textbf{(2) 实现了 A2 temporal-spectral-spatial EEG 语义融合模型}。在 CLIP 语义空间中通过三支路并行编码 + 门控残差融合，验证了真实配对 EEG 能够显著提升退化图像的语义识别性能。在 18/18 的 seed-condition 组合中，real EEG 均优于所有对照。
+
+\textbf{(3) 完成了 VTF token-level EEG 视觉特征增强}。将 EEG 信息从 pooled embedding 层推进到 visual token 层，为生成式视觉语言模型提供了可用的 EEG-enhanced 视觉输入。
+
+\textbf{(4) 构建了基于 Qwen2-VL 的生成式图像描述原型}。使用 LoRA 低秩适配和 best-of-N reranking，在 strong 退化条件下实现了 97.8\% 的有效输出率和 real EEG 对 vision-only 约 8.4 个百分点的 caption class-hit 提升。
+
+\subsection{主要收获}
+
+通过本次课程设计，对 EEG 信号处理、多模态融合架构设计、预训练视觉语言模型的适配与微调、LoRA 参数高效训练，以及严格的对照实验设计等多个方面有了系统性的实践。在设计过程中，从最初的概念验证到逐阶段的功能扩展，从分类任务到生成式输出，每一步都包含了可验证的中间结果，这种分层构建的思路对理解复杂系统的开发流程很有帮助。
+
+\subsection{不足与改进方向}
+
+本课程设计存在以下可改进之处：(1) 数据集规模有限——Thought2Text 仅 40 类约 12000 条 trial，限制了模型在更多类别上的泛化能力；(2) 生成式描述的训练目标依赖 BLIP 伪 caption，其质量与人工标注存在差距，可能限制了生成模型的性能上限；(3) 未对 EEG 个体差异进行显式建模，所有训练在 6 个被试的混合数据上进行；(4) VTF token fusion 的交互深度有限，使用更复杂的 multi-layer bridge 可能进一步提升 enhanced vision tokens 的质量。
+
+未来可尝试的方向包括：在更大规模的 EEG-image-text 数据集上进行预训练和迁移、引入 subject adaptation 模块降低个体差异影响、使用更强的 Q-Former 或 Perceiver bridge 替代当前的双层 cross-attention 进行 token fusion。
+
+需要再次说明，本课程设计是在小样本 EEG-image 数据条件下的初步探索。实验结果表明，真实配对 EEG 在视觉退化条件下能够为视觉语言模型提供统计上显著的语义辅助信息，但受限于数据规模和模型复杂度，当前生成的自由文本描述的质量仍远不能与大规模视觉语言模型在清洁图像上的输出相比。本文的工作定位是通过严格的对照实验，为 EEG 作为视觉语义增强信号的可行性提供经验性证据。

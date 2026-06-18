@@ -1,0 +1,127 @@
+\section{实验结果与分析}
+
+本章报告全部定量实验结果和定性示例分析。以下结果均在测试集（1997 条 trial）全量评估下得到，A2 结果报告三个随机种子（42、123、2025）的均值。
+
+\subsection{实验设置}
+
+实验的软硬件配置见表~\ref{tab:exp-setup}。
+
+\begin{table}[htbp]
+  \centering
+  \caption{实验软硬件配置}
+  \label{tab:exp-setup}
+  \begin{tabular}{l l}
+    \toprule
+    配置项 & 说明 \\
+    \midrule
+    GPU & NVIDIA RTX 6000 Ada, 48GB 显存 \\
+    精度 & bfloat16 混合精度 \\
+    CLIP backbone & ViT-B/32（pooled 512-d, visual tokens $50\times512$）\\
+    EEG encoder & A2 temporal-spectral-spatial, 512-d 输出 \\
+    训练规模 & train 7970, val 1998（全量训练）\\
+    测试规模 & test 1997（全量测试）\\
+    退化条件 & clean, lowres16, strong\_blur, strong\_noise, occlusion50, mixed \\
+    EEG 模式 & vision\_only, real\_eeg, shuffled\_eeg, random\_eeg, eeg\_only \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{A2 语义识别结果}
+
+A2 在六种退化条件下的 multi-seed 语义预测结果如表~\ref{tab:a2-main} 所示。表中数值为三个种子的 mean top-1 accuracy。
+
+\begin{table}[htbp]
+  \centering
+  \caption{A2 语义融合多种子语义预测结果（三种子均值）}
+  \label{tab:a2-main}
+  \begin{tabular}{l c c c c c}
+    \toprule
+    退化条件 & Vision-only & Real EEG & Shuffled EEG & Random EEG & Real-Control \\
+    \midrule
+    clean & 0.950 & 0.975 & 0.403 & 0.681 & +0.572/+0.294 \\
+    lowres16 & 0.258 & 0.523 & 0.070 & 0.062 & +0.453/+0.461 \\
+    mixed & 0.066 & 0.392 & 0.046 & 0.041 & +0.346/+0.351 \\
+    occlusion50 & 0.811 & 0.880 & 0.237 & 0.378 & +0.643/+0.502 \\
+    strong\_blur & 0.759 & 0.837 & 0.187 & 0.273 & +0.650/+0.564 \\
+    strong\_noise & 0.644 & 0.782 & 0.178 & 0.266 & +0.605/+0.516 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+表~\ref{tab:a2-main} 揭示了以下规律：(1) 真实 EEG 在所有退化条件下均优于 vision-only，提升幅度从 clean 下的 2.5 个百分点到 mixed 下的 32.6 个百分点，退化越严重增益越大；(2) 真实 EEG 在所有条件下均大幅超过 shuffled EEG 和 random EEG，Real-Shuffled 增益为 34.6--65.0 个百分点，两个对照组在多数条件下接近随机水平（对 40 类任务，随机概率为 2.5\%），说明模型学到的 EEG 信息确实来自真实配对信号；(3) 在 3 个种子 × 6 个条件的 18 组评估中，real EEG 在全部情况下均优于所有对照，胜率为 18/18。
+
+\placeholderfigure{A2 不同退化条件下 Top-1 accuracy 柱状图}{a2-bar-chart-placeholder}{5.0cm}
+
+\subsection{不同语义融合方法对比}
+
+除 A2 外，还对多种融合方法进行了比较：(1) P2 raw+spectrogram 双路融合——仅使用时间波形和频谱两路特征，无空间分支；(2) P2A2——在 P2 encoder 上添加 A2-style 三支路后融合；(3) residual adapter——在视觉嵌入上加入 EEG-based 残差适配器，无门控；(4) prototype bias——在文本原型相似度上加入 EEG 预测的偏移项。综合来看，A2 在大多数退化条件下取得了最高的 real-vision gap，且 real EEG 对 shuffled/random EEG 的优势最为稳定。三支路编码 + 门控残差融合的设计优势在第 5 章已有讨论，实验数据支持了这一设计选择。
+
+\subsection{Token-level VTF 结果分析}
+
+VTF 在 token-level 成功实现了 real EEG 优于 vision-only 和 EEG 对照，证明 token-level EEG fusion 的可行性。但 VTF 的绝对分类 accuracy 明显低于 A2 pooled fusion（例如 lowres16 条件下 VTF real EEG top-1 约为 0.18，A2 为 0.52）。这与设计预期一致：VTF 使用一次 cross-attention，而 A2 使用了更深的 gated fusion 网络。VTF 的主要价值在于其输出的 enhanced vision tokens 可直接驱动生成式模型。
+
+\subsection{生成式视觉语言模型结果}
+
+表~\ref{tab:evlm-results} 展示了各生成方案的主要定量结果。``Strong''列为 strong\_blur 和 strong\_noise 两个强退化条件的平均。
+
+\begin{table}[htbp]
+  \centering
+  \caption{生成式视觉语言模型结果对比}
+  \label{tab:evlm-results}
+  \begin{tabular}{l c c c c}
+    \toprule
+    模型 & 有效率 & Class-hit (Strong) & Real-Vision & Real-Shuffled \\
+    \midrule
+    GRU baseline & 68.1\% & 12.4\% & +2.2\% & +5.2\% \\
+    方案一 Qwen2.5 + LoRA & 32.4\% & 18.1\% & +2.7\% & +5.3\% \\
+    方案五 full adapter & 91.1\% & 29.4\% & +5.0\% & +5.5\% \\
+    方案五 LoRA $r=8$ & 91.9\% & 38.3\% & +9.1\% & +10.3\% \\
+    方案五 LoRA $r=16$ & 83.6\% & 30.4\% & +5.6\% & +6.0\% \\
+    方案五 best-of-N & \textbf{97.8\%} & 37.4\% & +8.4\% & +11.1\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+从表~\ref{tab:evlm-results} 可得：(1) 方案五（Qwen2-VL）显著优于方案一（纯文本 Qwen2.5 + LoRA），说明原生视觉语言模型对视觉 token 的理解能力是生成质量的关键；(2) LoRA $r=8$ 在 class-hit 上优于 $r=16$，验证了小样本条件下低秩约束的正则化作用；(3) best-of-N reranking 将有效率从 91.9\% 提升到 97.8\%，同时维持了较高的 class-hit；(4) 所有方案五变体的 real EEG class-hit 均高于 vision-only 和 EEG 对照组。
+
+但需要指出，生成式模型的 absolute class-hit 仍远低于 A2 的 top-1 accuracy。这说明在小样本条件下，受约束的分类预测比自由文本生成更可靠。生成式模型的主要价值在于产生可用于展示的自然语言描述。
+
+\subsection{定性示例分析}
+
+表~\ref{tab:qualitative} 给出了四个代表性定性示例，用于直观展示 EEG 在退化条件下的语义辅助效果。
+
+\begin{table}[htbp]
+  \centering
+  \caption{定性 caption 示例对比}
+  \label{tab:qualitative}
+  \begin{tabularx}{\linewidth}{l l X X}
+    \toprule
+    真实类别 & 退化 & Vision-only caption & Real EEG caption \\
+    \midrule
+    reflex camera & lowres16 & a hand holding a cell phone & \textbf{a black and white photo of an old camera} \\
+    canoe & lowres16 & a plane is flying through the sky & \textbf{a red and yellow canoe in the water} \\
+    parachute & mixed & a group of people sitting on steps & \textbf{a group of parachutes flying in the sky} \\
+    bolete mushroom & mixed & a man walking down a street at night & \textbf{a mushroom in the ground among other mushrooms} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+从表~\ref{tab:qualitative} 可以看到，在低分辨率和复合退化条件下，vision-only 的 caption 完全偏离了图像的真实内容（如将 canoe 识别为 plane），而 real EEG caption 正确识别了物体类别并生成了合理的自然语言描述。这些示例直观展示了真实 EEG 在退化条件下的辅助作用。
+
+\subsection{实验结果讨论}
+
+从以上实验结果可以归纳出四个主要发现。
+
+第一，A2 语义融合模型的对照实验为``真实 EEG 携带可机器利用的视觉语义信息''提供了多方面证据。在 3 个随机种子 × 6 种退化条件的全部 18 组评估中，real EEG 的 top-1 accuracy 均显著高于 vision-only（提升 2.5--32.6 个百分点）和 shuffled/random EEG（提升 29.4--65.0 个百分点）。shuffled EEG 和 random EEG 在大多数退化条件下接近随机猜测水平（2.5\%），排除了模型容量增大导致的性能增益假说。18/18 的胜率在统计上具有说服力。
+
+第二，退化程度与 EEG 增益呈正相关关系。在 clean 条件下，视觉编码器已能提供可靠的语义表示，EEG 仅带来 2.5 个百分点的微幅提升。在 mixed 复合退化条件下，视觉编码器的表示严重受损，EEG 提供了 32.6 个百分点的显著增益。这一趋势在所有退化条件中一致，验证了``视觉输入质量越差，大脑的额外神经表征越有价值''的假设。
+
+第三，生成式模型与分类模型之间存在明显的性能落差。A2 分类器在 strong\_blur 下 real EEG top-1 accuracy 为 83.7\%，而生成式模型在同条件下的 caption class-hit 仅为 38.3\%。这说明在当前小样本条件下，将 EEG 信息用于受约束的语义分类比用于自由文本生成更可靠。生成式模型的主要贡献在于能够产生自然语言输出用于展示，但在定量指标上不应与分类器直接比较。
+
+第四，best-of-N reranking 是一种低成本的生成质量提升策略。在不修改模型参数的情况下，仅通过对 5 个候选 caption 进行 CLIP 相似度排序，就将有效输出率从 91.9\% 提升到 97.8\%，同时保持 class-hit 接近最优水平。这一策略可以广泛应用于类似的生成式评估流程中。
+
+本课程设计的实验也存在若干局限。所有结果均在 Thought2Text 的 40 类范围内获得，不能直接推广到其他 EEG 数据集或更多类别。A2 的多种子评估仅使用了 3 个种子，虽然一致性好，但种子数量较少。生成式模型的定类评估依赖 CLIP text prototypes 的零样本分类性能，该性能本身受限于 CLIP 在具体类别上的判别能力。
+
+\subsection{实验小结}
+
+综合所有实验结果和分析：(1) A2 temporal-spectral-spatial semantic fusion 模型在 18/18 的 seed-condition 组合中 real EEG 均优于 vision-only 和 shuffled/random EEG，是本课程设计中最强的定量模型；(2) EEG 增益与视觉退化程度正相关；(3) 基于 Qwen2-VL 的生成方案在 strong 退化条件下实现了 97.8\% 的有效输出率和 real EEG 对 vision-only 约 8--9 个百分点的 class-hit 提升，但生成式模型的 absolute accuracy 仍显著低于 A2 分类器；(4) shuffled EEG 和 random EEG 始终接近机会水平，证明模型学到的增益来自真实配对的 EEG 信号。

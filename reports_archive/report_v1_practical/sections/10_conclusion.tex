@@ -1,0 +1,21 @@
+\section{总结与反思}
+
+\subsection{完成的工作}
+
+在这次课程设计中，我在 Thought2Text 数据集上构建了一个完整的 EEG 辅助视觉语言理解系统，主要完成了以下工作：
+
+\textbf{实验框架搭建}：设置了六种视觉退化条件和 five 种 EEG 对照模式，采用 image-level split 保证数据划分的科学性，为后续所有实验提供了统一的评估标准。
+
+\textbf{A2 EEG 语义融合模型}：设计和实现了三支路 EEG 编码器，同时提取 EEG 的时间、频谱和空间特征。在 18/18 的 seed-condition 组合中，real EEG 均优于 vision-only 和 shuffled/random 对照。在 mixed 复合退化条件下，real EEG 比 vision-only 提升了约 32.6 个百分点。
+
+\textbf{Token-level 增强和生成式输出}：实现了 VTF cross-attention 将 EEG 融入 visual tokens，接入 Qwen2-VL 生成模型，在 strong 退化条件下实现了约 97.8\% 的有效输出率。
+
+\subsection{个人收获}
+
+这次课程设计是我大学期间做过的综合性最强的项目。在技术层面，我系统实践了 PyTorch 项目组织、多模态模型集成、大模型 LoRA 微调、EEG 信号预处理等技能。在方法层面，我学到了对照实验设计的重要性：如果没有 shuffled EEG 和 random EEG 两个基线，就很难判断 A2 模型性能的提升是来自 EEG 的语义信息还是仅仅是模型参数增加带来的容量增益。这个经验对我未来的研究和工程工作都很有启发。
+
+在项目执行过程中也踩了不少坑：CLIP 特征缓存的路径管理、Qwen2-VL adapter 与自定义 visual token 的格式对齐、BLIP 伪 caption 的质量过滤、全量测试的推理时间控制等等。这些看似琐碎的问题在实际工程中占据了大量时间，也让我更加理解一个真实研究项目从 idea 到 running code 之间有多少``看不见的工作''。
+
+\subsection{不足与展望}
+
+回顾整个过程，有几个地方可以做得更好：(1) 受限于数据集规模（40 类、12000 trial），模型的泛化范围有限，如果能用上更大规模的 EEG-image 数据集，效果可能会明显改善；(2) 生成式模型的 caption 质量距离实际应用还有很大距离，目前的策略在展示层面够用但不稳定；(3) 时间关系，没有对 subject-specific 的 EEG 个体差异做精细化建模；(4) LoRA 的超参搜索（$r$ 和 $\alpha$ 的组合）不够全面。未来如果继续这个方向，我会优先尝试更大规模的数据和多被试自适应策略。
