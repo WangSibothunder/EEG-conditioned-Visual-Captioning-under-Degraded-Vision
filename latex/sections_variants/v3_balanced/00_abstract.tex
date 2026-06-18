@@ -1,0 +1,22 @@
+\begin{center}
+{\heitifont\zihao{2} 摘\quad 要}
+\end{center}
+
+当图像出现模糊、低分辨率或遮挡时，视觉语言模型的语义理解能力会受到显著影响。人脑在观看图像时产生的脑电信号可能携带额外的视觉语义信息，这为退化条件下的图像理解提供了新的思路。本次课程设计在小样本 EEG-image 配对数据上，探索了真实脑电信号能否作为视觉语义增强信号来辅助视觉语言模型。
+
+技术实现分为四个层次：首先利用 CLIP 图文对齐空间构建统一的语义表示框架，将图像、文本类别和脑电嵌入对齐到同一空间；然后设计 A2 时间-频谱-空间脑电编码器，从三个维度提取脑电特征并通过门控残差融合补充退化图像信息；接着实现 VTF token 级融合，在视觉 patch token 层面注入脑电 token；最后将增强视觉 token 接入 Qwen2-VL 生成模型，通过 LoRA 微调和多候选重排序实现自然语言描述生成。
+
+我们在 Thought2Text 数据集上完成了全量训练和测试，设置了六种视觉退化条件和四组 EEG 对照模式。结果表明 A2 模型在全部退化条件下真实脑电均优于对照组，退化越严重增益越大；生成式模型的有效输出率达到 97.8\%，真实脑电的 caption 类别命中率相比纯视觉提升约 8--9 个百分点。本课程设计初步验证了小样本条件下 EEG 作为视觉语义增强信号辅助 VLM 的可行性。
+
+\vspace{0.5cm}
+\noindent\textbf{关键词：}脑电信号；视觉语言模型；CLIP；视觉退化；多模态融合；LoRA；图像描述生成
+
+\clearpage
+\begin{center}
+{\bfseries\zihao{2} Abstract}
+\end{center}
+
+This course design investigates EEG-assisted vision-language understanding under degraded visual conditions. Using CLIP semantic space as a bridge, we build an A2 temporal-spectral-spatial EEG encoder, VTF token-level fusion, and a Qwen2-VL based generative model with LoRA fine-tuning. Experiments on Thought2Text with real/shuffled/random EEG controls show paired EEG consistently improves semantic prediction and caption generation.
+
+\vspace{0.5cm}
+\noindent\textbf{Keywords:} EEG; Vision-Language Model; CLIP; Visual Degradation; Multimodal Fusion; LoRA; Image Captioning

@@ -1,0 +1,37 @@
+\section{Token-level EEG 视觉特征增强}
+
+A2 模型的 EEG 融合发生在 pooled embedding 层，融合后的单个 512 维向量丢弃了图像的空间位置信息。为了使 EEG 信息能进入原生视觉语言模型的 token 处理流程，本章介绍 VTF 方法，在 CLIP ViT visual patch token 层面注入 EEG 信息。
+
+\subsection{动机}
+
+Pooled embedding fusion 将整张图像压缩为单个向量与 EEG 融合，这对分类任务足够，但对生成式任务有明显限制：语言解码器期望的输入是 token 序列而非单一向量；token 序列保留了图像不同空间位置的视觉特征，有利于对图像中多个对象进行细粒度描述。此外，EEG 对不同图像区域的语义响应可能是分化的——例如观看包含人物和物体的复杂场景时，电极在不同区域的响应模式有差异。Token-level fusion 通过注意力机制让不同的 visual patch token 选择性地关注不同的 EEG token，实现更精细的跨模态交互。
+
+\subsection{CLIP ViT 视觉 token 提取}
+
+CLIP ViT-B/32 将 $224\times224$ 图像分为 $7\times7$ 个 patch（每 patch $32\times32$），经 ViT encoder 处理后输出 50 个视觉 token（1 个 CLS token + 49 个 patch token），每个维度为 512：$F_{\mathrm{vis}} \in \mathbb{R}^{B\times50\times512}$。CLS token 聚合了全局语义，patch token 编码了局部区域特征。
+
+\subsection{EEG token 构造}
+
+A2 encoder 输出的 pooled EEG embedding 为单一 512 维向量。为使其与视觉 token 进行 token 级交互，设计了轻量 EEG tokenizer：通过 4 个并行的可学习线性投影器将 pooled embedding 扩展为 4 个 EEG token（$F_{\mathrm{eeg}} \in \mathbb{R}^{B\times4\times512}$）。选择 4 个 token 是效率与信息多样性的折中：token 过少缺乏交互多样性，过多则可能过度主导视觉表示。
+
+\subsection{视觉到 EEG 的交叉注意力融合}
+
+VTF 的核心是 visual-to-EEG cross-attention，结构如图~\ref{fig:vtf} 所示。视觉 token 作为 Query，EEG token 作为 Key 和 Value：
+
+\begin{equation}
+  F_{\mathrm{enhanced}} = F_{\mathrm{vis}} + \beta \cdot \mathrm{CrossAttention}(Q=F_{\mathrm{vis}}, K=F_{\mathrm{eeg}}, V=F_{\mathrm{eeg}})
+\end{equation}
+
+\placeholderfigure{VTF visual-to-EEG cross-attention 结构图}{vtf-cross-attention-placeholder}{4.2cm}
+
+其中 CrossAttention 使用标准的多头交叉注意力（$h=8$）。$\beta$ 为置信度感知门控系数：
+
+\begin{equation}
+  \beta = \gamma \cdot \sigma\left(W_\beta [\mathrm{pool}(F_{\mathrm{vis}}); \mathrm{pool}(F_{\mathrm{eeg}})] + b_\beta\right)
+\end{equation}
+
+$\gamma$ 为可训练的缩放因子（初始化为 0.1），训练初期抑制 EEG 注入以避免不稳定梯度。门控机制使模型能根据视觉质量动态调节 EEG 注入程度。融合后的 $F_{\mathrm{enhanced}}$ 保持 $[B, 50, 512]$ 形状不变，与任何接受 CLIP ViT visual tokens 的下游模型兼容。
+
+\subsection{分类验证}
+
+为验证 VTF 的有效性，首先在分类任务上进行评估：将 $F_{\mathrm{enhanced}}$ 平均池化后与 CLIP 文本原型进行零样本分类。实验结果表明，VTF 在多项退化条件下 real EEG 优于 vision-only 和 shuffled/random EEG 对照，验证了 token-level EEG fusion 的可行性。不过，VTF 的总体分类准确率仍显著低于 A2 的 pooled fusion，因为后者使用了更深的 gated fusion 网络和更充分的跨模态交互。VTF 的核心价值在于它产生的 enhanced vision tokens 可直接输入生成式 VLM，这是下一章的基础。

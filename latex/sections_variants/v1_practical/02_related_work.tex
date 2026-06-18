@@ -1,0 +1,81 @@
+\section{相关技术与理论基础}
+
+本章介绍本课程设计涉及的五方面技术基础：视觉语言模型、CLIP 语义空间、EEG 视觉解码、视觉退化建模与多模态融合，以及 LoRA 参数高效微调。每节只阐述与本设计直接相关的核心概念和方法。
+
+\subsection{视觉语言模型概述（VLM）}
+
+视觉语言模型是一类能同时处理图像和文本输入、进行跨模态信息融合与推理的深度学习模型。按输出类型可分为两类：对齐型和生成型。
+
+对齐型 VLM 的代表是 CLIP。CLIP 在约 4 亿对图文数据上进行对比预训练，使图像编码器（ViT 或 ResNet）和文本编码器（Transformer）学习到对齐的嵌入空间。在训练收敛后，语义相近的图文在向量空间中彼此靠近，因此可以直接通过计算余弦相似度实现零样本分类。对齐型 VLM 的输出是固定维度的嵌入向量，适合用于检索、分类和特征提取等任务。
+
+生成型 VLM 在对齐型的基础上增加了语言解码模块。典型代表包括 BLIP-2、LLaVA 和 Qwen-VL 系列。BLIP-2 使用 Q-Former 将视觉特征压缩为固定数量的查询 token，再注入冻结的大语言模型；LLaVA 采用简单的线性投影器将视觉 token 映射到语言模型的嵌入空间；Qwen-VL 是阿里巴巴通义千问团队推出的原生多模态模型系列，其视觉模块和语言模块在预训练阶段已经过端到端的图文对齐。
+
+两类模型的本质区别体现在输出形式、训练目标和适用场景上。对齐型 VLM 只有编码器，输出固定维度的向量，适合用于检索、分类和特征提取等不需要文本生成的任务。CLIP 是这类模型的典型代表，其零样本分类能力在 ImageNet 等基准上已经接近有监督训练的 ResNet-50。生成型 VLM 包含自回归文本解码器，能根据视觉输入逐 token 生成自然语言文本，适合图像描述、视觉问答和指令跟随等任务。BLIP-2 的架构创新在于引入 Q-Former 作为视觉和语言之间的轻量查询桥接器，使得视觉特征可以被压缩为少量查询 token 后注入冻结的 LLM，避免了重新训练 LLM 的高昂成本。LLaVA 采用了更简单的方案——仅使用一个线性投影层将视觉 token 映射到语言模型的 embedding 空间，并通过视觉指令微调数据赋予模型对话和多轮交互能力。Qwen-VL 在此基础上进一步优化了视觉编码器与语言模型的原生集成，支持任意分辨率的图像输入和更长的视觉 token 序列。
+
+本设计在语义识别任务中使用对齐型 VLM（CLIP），利用其零样本分类能力在 40 类的受约束空间中进行 EEG 辅助分类；在生成式描述任务中使用生成型 VLM（Qwen2-VL-2B-Instruct），利用其视觉-语言对齐能力和自回归生成能力产生自由形式的图像描述。
+
+\placeholderfigure{CLIP 与生成式视觉语言模型结构区别示意图}{clip-vlm-contrast-placeholder}{3.2cm}
+
+\subsection{CLIP 图文语义空间}
+
+CLIP 通过对称的 InfoNCE 对比损失进行训练。对于批大小为 $N$ 的图文对集合 $\{(x_i, t_i)\}_{i=1}^{N}$，图像编码器输出 $f_{\mathrm{img}}(x_i)$，文本编码器输出 $f_{\mathrm{text}}(t_i)$。训练目标是最大化正确配对的余弦相似度，同时最小化错误配对的相似度：
+
+\begin{equation}
+  \mathcal{L} = -\frac{1}{2N}\sum_{i=1}^{N}\left[
+    \log\frac{\exp(\tau^{-1}\cos(f_{\mathrm{img}}(x_i), f_{\mathrm{text}}(t_i)))}
+         {\sum_{j=1}^{N}\exp(\tau^{-1}\cos(f_{\mathrm{img}}(x_i), f_{\mathrm{text}}(t_j)))} +
+    \log\frac{\exp(\tau^{-1}\cos(f_{\mathrm{img}}(x_i), f_{\mathrm{text}}(t_i)))}
+         {\sum_{j=1}^{N}\exp(\tau^{-1}\cos(f_{\mathrm{img}}(x_j), f_{\mathrm{text}}(t_i)))}
+  \right]
+\end{equation}
+
+其中 $\tau$ 为可学习的温度参数，用于控制相似度分布的尖锐程度。
+
+CLIP 的一个关键能力是零样本分类。给定 $K$ 个类别，为每个类别 $c$ 构造文本提示如 ``a photo of a \{class\_name\}''，通过 CLIP 文本编码器得到文本原型 $p_c = f_{\mathrm{text}}(t_c)$。对于待分类图像 $x$，预测类别为与图像嵌入余弦相似度最高的原型对应的类别：
+
+\begin{equation}
+  \hat{c} = \arg\max_{c\in\{1,\dots,K\}} \frac{f_{\mathrm{img}}(x)^{\top} p_c}{\|f_{\mathrm{img}}(x)\|\,\|p_c\|}
+\end{equation}
+
+本设计充分利用这一特性：通过 CLIP text encoder 预计算 40 类的文本原型，在训练和评估期间保持冻结；模型只需学习将融合后的多模态嵌入推向正确的原型方向，避免在少量 EEG 数据上从头训练分类器。
+
+\subsection{EEG 视觉语义解码}
+
+EEG 通过在头皮表面放置电极阵列记录大脑皮层的电活动。在视觉认知范式中，EEG 能捕捉被试观看图像时产生的诱发响应，包括早期的 P100/N170 视觉成分和晚期的 P300 等语义加工成分。EEG 的主要优势是毫秒级时间分辨率，适合追踪快速的神经编码过程。
+
+然而，EEG 用于视觉语义解码面临若干固有挑战：(1) 信噪比低——单次 trial 的信号受到肌电、眼动和环境电磁干扰的影响；(2) 个体差异大——不同被试因电极位置和颅骨厚度的差异，响应模式呈现显著变异性；(3) trial 级数据量小——在典型实验中，每个被试在每个类别上的有效 trial 数仅为数十条。这些特点决定了直接从小样本 EEG 学习自由文本生成存在严重的数据瓶颈。
+
+针对上述挑战，已有研究者开展了多方面的尝试。Spampinato 等人率先使用深度学习方法从 EEG 中解码视觉内容，在物体分类任务上取得了重要进展。Palazzo 等人构建了 EEG-ImageNet 大规模数据集，将 ImageNet 图像与同步采集的 EEG 进行配对。近年来的工作进一步探索了将 EEG 嵌入对齐到 CLIP 语义空间，以及 EEG-conditioned 的图像生成。然而，现有研究大多在完整可见的视觉条件下进行，视觉退化场景下 EEG 的语义辅助作用尚未得到系统性的对照验证。
+
+本设计在数据利用上采取了以下策略：在 CLIP 预训练语义空间中进行 EEG-image 对齐，以利用 CLIP 在大规模数据上学习到的语义结构，降低对 EEG 数据量的依赖；同时设置 shuffled EEG 和 random EEG 两种对照组，确保任何性能提升可归因于真实配对的 EEG 语义信息。
+
+\subsection{视觉退化建模}
+
+为系统评估模型在不同图像质量条件下的表现，本设计定义了六种视觉退化条件：
+
+\begin{itemize}
+  \item \textbf{clean}：原始图像，无任何退化处理；
+  \item \textbf{lowres16}：将图像缩小至 $16\times16$ 像素再放大至 $224\times224$，模拟极低分辨率场景；
+  \item \textbf{strong\_blur}：施加 $\sigma=5$ 的高斯模糊，模拟运动模糊或失焦；
+  \item \textbf{strong\_noise}：施加标准差为 0.15 的高斯噪声，模拟传感器噪声；
+  \item \textbf{occlusion50}：随机遮盖 50\% 图像区域（Cutout），模拟部分遮挡；
+  \item \textbf{mixed}：随机组合两种以上退化类型，模拟复杂复合退化。
+\end{itemize}
+
+退化操作在图像输入 CLIP 编码器之前在线执行，不需要为每种退化预存完整图像副本，显著降低存储开销。实验中预期真实 EEG 的增益在退化严重的条件下更大，因为这时的视觉编码器输出更不可靠，模型对 EEG 辅助信息的依赖更强。
+
+\subsection{多模态融合机制}
+
+本设计涉及从粗粒度到细粒度的多层级融合方法：
+
+Embedding 级融合将不同模态的向量表示在特征空间中进行组合，包括直接拼接、加权求和和门控残差融合。本设计采用的门控残差融合公式为 $f_{\mathrm{fused}} = f_{\mathrm{img}} + \sigma(g([f_{\mathrm{img}}; f_{\mathrm{eeg}}])) \odot \Delta(f_{\mathrm{eeg}})$，其中 $g(\cdot)$ 为门控网络，$\sigma$ 为 sigmoid 函数，$\Delta(\cdot)$ 为 EEG 残差变换网络。门控机制使模型能根据联合输入动态调整 EEG 信号的注入强度，在图像质量较好时减少 EEG 的影响，退化严重时增大 EEG 的修正幅度。
+
+Token 级融合在 CLIP ViT 输出的 visual patch token 序列上注入 EEG token，使用 cross-attention 实现：visual token 作为 Query，EEG token 作为 Key 和 Value，输出增强视觉 token。相对于 embedding 级融合，token 级融合保留了视觉信息的空间结构，更适配生成式 VLM 的输入格式。
+
+\subsection{LoRA 参数高效微调}
+
+大语言模型和视觉语言模型通常具有数十亿参数，在小规模训练数据上进行全参数微调极易导致过拟合和原有能力的退化。LoRA（Low-Rank Adaptation）通过在注意力层的权重矩阵中引入可训练的低秩分解矩阵来解决此问题。
+
+对于预训练权重矩阵 $W_0 \in \mathbb{R}^{d\times k}$，LoRA 注入低秩增量 $\Delta W = BA$，其中 $B \in \mathbb{R}^{d\times r}$，$A \in \mathbb{R}^{r\times k}$，秩 $r$ 远小于 $d$ 和 $k$。前向计算为 $h = W_0 x + \frac{\alpha}{r} \cdot BA x$，其中 $\alpha$ 为缩放因子。训练时仅更新 $A$ 和 $B$，原始权重 $W_0$ 保持冻结。
+
+在本课程设计的生成式描述任务中，LoRA 应用于 Qwen2-VL 注意力机制中 Query 和 Value 的投影矩阵，秩 $r=8$。采用 LoRA 而非全参数微调，是本设计能在单 GPU 上完成 Qwen2-VL-2B 生成模型训练的重要工程前提。

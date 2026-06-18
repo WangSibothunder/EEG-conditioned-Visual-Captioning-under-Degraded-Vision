@@ -1,0 +1,22 @@
+\begin{center}
+{\heitifont\zihao{2} 摘\quad 要}
+\end{center}
+
+视觉语言模型在实际使用中高度依赖图像质量——遇到低分辨率、模糊、噪声或遮挡时，模型的理解和描述能力都会明显下降。脑电图可以记录人看图像时的神经电活动，这些信号里可能藏着额外的语义信息。我们的课程设计想搞清楚一个问题：在图像质量不好的时候，真实的脑电信号能不能帮视觉语言模型更好地理解图像内容。
+
+我们用的是 Thought2Text 数据集，大约 2000 张图像、12000 条脑电记录，覆盖 40 个类别。整体思路是这样的：先把图像、文本和脑电都映射到 CLIP 语义空间里；然后设计了一个叫 A2 的脑电编码器，从时间、频谱和电极空间三个角度分别提取特征，再通过门控残差融合把脑电信息补到退化图像上；接着做了 token 级的 VTF 融合模块，让脑电信息能在视觉 patch token 层面参与交互；最后把这些增强后的视觉 token 送进 Qwen2-VL 生成模型，通过 LoRA 微调和多候选重排序产出自然的图像描述。
+
+实验里我们设了四组对比：真实配对脑电、纯图像、打乱顺序的脑电和随机噪声脑电。A2 模型在所有退化条件下真实脑电都优于其他三组，退化越严重优势越明显（复合退化下超过 30 个百分点）。生成模型这边，真实脑电的 caption 类别命中率比纯图像高了约 8--9 个百分点，有效输出率做到了 97.8\%。可以看出，在视觉退化条件下，真实配对脑电确实能给视觉语言模型提供一些有用的语义辅助。
+
+\vspace{0.5cm}
+\noindent\textbf{关键词：}脑电信号；视觉语言模型；CLIP；视觉退化；多模态融合；LoRA；图像描述生成
+
+\clearpage
+\begin{center}
+{\bfseries\zihao{2} Abstract}
+\end{center}
+
+This course project explores whether real EEG signals can help vision-language models understand degraded images. Using Thought2Text data, we build a CLIP semantic space, design an A2 temporal-spectral-spatial EEG encoder with gated fusion, implement VTF token-level cross-attention, and feed enhanced visual tokens into Qwen2-VL with LoRA fine-tuning. Experiments with real/shuffled/random EEG controls show paired EEG consistently improves both semantic recognition and caption generation across six degradation conditions.
+
+\vspace{0.5cm}
+\noindent\textbf{Keywords:} EEG; Vision-Language Model; CLIP; Visual Degradation; Multimodal Fusion; LoRA; Image Captioning
