@@ -1,30 +1,30 @@
 \section{系统总体设计}
 
-本章从宏观角度介绍系统的设计思路、总体架构、模块划分和实验流程。
+在这一章中，我们从整体上介绍系统的设计理念、整体框架、功能模块组成以及实验的完整流程。
 
 \subsection{总体设计思路}
 
-考虑到 Thought2Text 数据集仅有 40 个类别约 12000 条 trial，数据量仅为典型视觉语言模型预训练集的百万分之一量级，直接从 EEG 学习生成自由文本存在明显的数据瓶颈。此外，数据集中不包含人工撰写的自然语言图像描述，类别标签是唯一的原始标注。因此本课程设计采用从简到繁、从定量验证到生成式输出的分层设计思路，将整个系统构建分为四个递进的阶段。每个阶段都有明确的输入输出定义和可验证的中间结果，前一个阶段的输出可直接作为后一个阶段的输入或基础组件。
+Thought2Text 数据集共有 40 个类别，大约包含 12000 条 trial，这个规模大约只有主流视觉语言模型预训练集的百万分之一。数据量这么小，直接从 EEG 信号学出生成自然文本的能力是很困难的。另外，这个数据集也没有人工写的图片描述，只有类别标签这一种原始标注。所以我们把整个系统设计成四个递进的阶段，从简单到复杂，从定量验证逐步过渡到生成式输出。每个阶段我们都有明确的输入输出定义，中间结果也是可验证的，前面阶段的输出可以直接用做后面阶段的输入或者基础模块。
 
-\textbf{第一阶段：CLIP 语义空间构建}。利用 CLIP 在大规模数据上预训练得到的图文对齐空间作为跨模态桥梁。将 40 类文本 prompt 通过 CLIP text encoder 预计算为固定文本原型，将全量图像通过 CLIP ViT 预缓存为视觉特征。这一阶段为后续所有 EEG-图像语义交互提供了统一的操作空间，避免在少量 EEG 数据上从头学习语义结构。
+\textbf{第一阶段：CLIP 语义空间构建}。我们用 CLIP 在大规模数据上学到的图文对齐空间来做跨模态的桥梁。40 个类别的文本 prompt 先通过 CLIP text encoder 算好，存成固定的文本原型向量；所有图片也提前用 CLIP ViT 提取好视觉特征。这样一来，后面所有的 EEG 和图像之间的语义交互就都有了统一的操作空间，不需要在少量 EEG 数据上从头去学语义结构了。
 
-\textbf{第二阶段：A2 EEG 语义融合}。设计并实现 A2 temporal-spectral-spatial EEG encoder，从 EEG 信号中提取时间、频谱和空间三方面的语义特征。在 CLIP 语义空间中，通过门控残差融合将 EEG embedding 与退化图像的视觉 embedding 进行融合，以分类损失为主训练目标，并设置 shuffled EEG 和 random EEG 两种对照，严格验证 EEG 语义信息的真实性。
+\textbf{第二阶段：A2 EEG 语义融合}。我们设计了一个 A2 temporal-spectral-spatial EEG encoder，从 EEG 信号里分别提取时间、频谱和空间三个维度的语义信息。然后在 CLIP 语义空间中，用门控残差融合（gated residual fusion）把 EEG embedding 和经过退化处理的图像视觉 embedding 结合起来，主要用分类损失来训练。我们还设置了 shuffled EEG 和 random EEG 两种对照实验，用来严格验证 EEG 里面确实携带了真实的语义信息。
 
-\textbf{第三阶段：token-level EEG 视觉增强}。第二阶段的融合发生在 pooled embedding 层——整个图像的视觉信息被压缩为单一向量。为使 EEG 信息能够进入生成式 VLM 的 token 处理流程，本阶段设计 VTF 模块，在 CLIP ViT 的 visual patch token 层面注入 EEG token，通过 cross-attention 生成 EEG-enhanced vision tokens。
+\textbf{第三阶段：token 级别的 EEG 视觉增强}。第二阶段做的融合是在 pooled embedding 层面——整张图片的视觉信息被压缩成了一个向量。为了让 EEG 信息能够进入生成式 VLM 的 token 处理流程，我们在这个阶段设计了 VTF 模块，直接在 CLIP ViT 的 visual patch token 层注入 EEG token，通过 cross-attention 机制生成 EEG-enhanced vision tokens。
 
-\textbf{第四阶段：生成式 VLM 集成与验证}。将 enhanced vision tokens 输入 Qwen2-VL-2B-Instruct 生成式模型，使用 LoRA 进行参数高效微调。对比多种生成方案和训练目标，通过 best-of-N reranking 提升输出质量，最终实现从退化图像和 EEG 到自然语言描述的完整通路。
+\textbf{第四阶段：生成式 VLM 集成与验证}。我们把 enhanced vision tokens 送进 Qwen2-VL-2B-Instruct 生成式模型，用 LoRA 做参数高效的微调。我们对比了好几种生成方案和训练目标，再用 best-of-N reranking 来提升输出质量，最终实现了从退化图像和 EEG 信号到自然语言描述的完整通路。
 
 \subsection{系统总体架构}
 
-图~\ref{fig:overall-system} 给出了系统的总体结构。
+系统的整体结构如图~\ref{fig:overall-system} 所示。
 
 \placeholderfigure{系统总体架构图}{overall-system-placeholder}{4.5cm}
 
-系统的数据流如下：退化图像经冻结的 CLIP ViT 编码器处理后，输出 pooled image embedding（512 维）和 visual patch tokens（$50\times512$ 维）；EEG trial 经 A2 encoder 处理后，输出 pooled EEG embedding（512 维）和 EEG tokens（$4\times512$ 维）。在语义预测分支中，两个 pooled embedding 通过 gated fusion 融合后与文本原型进行相似度匹配，产生类别预测。在 token-level 分支中，visual tokens 与 EEG tokens 经 VTF cross-attention 产生 enhanced vision tokens。在生成式分支中，增强视觉 token 先通过本设计实现的轻量 prefix adapter 映射到 Qwen2-VL 可接收的嵌入空间，再与语义提示文本共同输入生成式解码器，经过 LoRA 微调后生成自然语言描述。
+数据在系统中的流向是这样的：退化图像经过冻结的 CLIP ViT 编码器处理之后，输出一个 512 维的 pooled image embedding 和一组 $50\times512$ 维的 visual patch tokens；EEG trial 经过 A2 encoder 处理之后，输出一个 512 维的 pooled EEG embedding 和一组 $4\times512$ 维的 EEG tokens。在语义预测分支里，两个 pooled embedding 经过 gated fusion 融合，再跟文本原型做相似度匹配，得到类别预测结果。在 token 级别的分支里，visual tokens 和 EEG tokens 通过 VTF cross-attention 生成 enhanced vision tokens。在生成式分支里，增强后的视觉 token 先经过我们实现的轻量 prefix adapter 映射到 Qwen2-VL 能接收的嵌入空间，然后跟语义提示文本一起输入生成式解码器，经过 LoRA 微调之后输出自然语言描述。
 
 \subsection{模块划分}
 
-系统包含七个核心模块，各模块的功能说明见表~\ref{tab:modules}。
+整个系统由七个核心模块组成，各个模块的功能说明列在表~\ref{tab:modules} 中。
 
 \begin{table}[htbp]
   \centering
@@ -34,23 +34,23 @@
     \toprule
     模块名称 & 功能说明 \\
     \midrule
-    图像编码模块 & CLIP ViT-B/32，提取 pooled embedding 和 visual patch tokens，模型参数冻结 \\
-    EEG 编码模块 & A2 temporal-spectral-spatial encoder，提取 pooled EEG embedding 和 EEG tokens \\
-    文本原型模块 & CLIP text encoder 预计算 40 类文本原型向量，训练期间冻结 \\
-    语义融合模块 & Gated residual fusion 将图像与 EEG embedding 融合，与文本原型匹配进行分类 \\
-    Token 融合模块 & VTF cross-attention 将 EEG tokens 融入 visual tokens，生成增强视觉 token \\
-    生成式描述模块 & Qwen2-VL-2B-Instruct + LoRA，接收增强视觉 token 并生成自由文本描述 \\
-    评估模块 & 多模式对照评测，统计各项指标，挖掘定性示例 \\
+    图像编码模块 & CLIP ViT-B/32，输出 pooled embedding 和 visual patch tokens，模型参数固定不更新 \\
+    EEG 编码模块 & A2 temporal-spectral-spatial encoder，输出 pooled EEG embedding 和 EEG tokens \\
+    文本原型模块 & 用 CLIP text encoder 预先算好 40 类文本原型向量，训练阶段保持不变 \\
+    语义融合模块 & 用 Gated residual fusion 把图像和 EEG 的 embedding 融合起来，再跟文本原型匹配做分类 \\
+    Token 融合模块 & 用 VTF cross-attention 把 EEG tokens 融合进 visual tokens，生成增强后的视觉 token \\
+    生成式描述模块 & Qwen2-VL-2B-Instruct + LoRA，接收增强视觉 token 并生成自由格式的文本描述 \\
+    评估模块 & 多种模式对照评测，统计指标，找出有代表性的定性案例 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
 \subsection{实验流程}
 
-图~\ref{fig:experiment-flow} 给出了从数据准备到最终评估的完整实验流程。
+图~\ref{fig:experiment-flow} 展示了从数据准备到最后评估的完整实验流程。
 
 \placeholderfigure{实验流程图}{experiment-flow-placeholder}{4.0cm}
 
-流程分为以下步骤：(1) 数据准备：下载 EEG 数据、链接 ImageNet 图像，构建 JSONL manifest；(2) CLIP 特征预缓存：预计算文本原型和全量图像视觉特征；(3) A2 EEG encoder 训练：使用 InfoNCE 对比损失进行 EEG-to-CLIP 对齐训练；(4) 语义融合训练：联合训练 gated fusion 和分类模块，在六种退化条件下进行多模式评估；(5) VTF token 融合训练：训练 cross-attention 融合模块；(6) 生成式模型训练：将 enhanced vision tokens 输入 Qwen2-VL，使用 LoRA 微调，对比多种训练目标和 LoRA 配置；(7) 全量测试与 reranking：对测试集在所有组合下进行评估，对最优 checkpoint 进行 best-of-N reranking；(8) 报告生成：汇总指标、挖掘定性示例。
+整个流程包括以下几个步骤：(1) 数据准备——下载 EEG 数据、关联 ImageNet 图片、构建 JSONL 格式的 manifest 文件；(2) CLIP 特征预缓存——提前算好文本原型和所有图片的视觉特征；(3) A2 EEG encoder 训练——用 InfoNCE 对比损失函数做 EEG 到 CLIP 的对齐训练；(4) 语义融合训练——把 gated fusion 和分类模块放在一起联合训练，在六种不同的退化条件下做多模式评估；(5) VTF token 融合训练——训练 cross-attention 融合模块；(6) 生成式模型训练——把 enhanced vision tokens 输入 Qwen2-VL，用 LoRA 做微调，比较不同的训练目标和 LoRA 配置；(7) 全量测试与 reranking——在测试集上把所有组合都跑一遍评估，对效果最好的 checkpoint 做 best-of-N reranking；(8) 报告生成——汇总各项指标，挖掘有代表性的定性案例。
 
-全部实验在单 GPU（NVIDIA RTX 6000 Ada, 48GB 显存）上完成，使用 bfloat16 混合精度训练，未使用多 GPU 分布式训练或 4-bit 量化。
+所有实验都在单张 GPU（NVIDIA RTX 6000 Ada，48GB 显存）上运行，使用 bfloat16 混合精度训练，没有用多 GPU 分布式训练或者 4-bit 量化。

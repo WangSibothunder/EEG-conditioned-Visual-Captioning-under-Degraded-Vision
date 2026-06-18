@@ -1,14 +1,14 @@
 \section{数据集与任务定义}
 
-本章介绍实验使用的数据集、预处理方法、数据划分策略、任务定义和评价指标。
+本章我们依次介绍实验所用的数据集、预处理流程、数据划分策略、任务设定以及评价指标。
 
 \subsection{数据集介绍}
 
-本课程设计使用 Thought2Text 数据集。该数据集由 6 名健康被试参与，每位被试观看了 40 个 ImageNet 类别的自然图像，在观看过程中同步采集 128 通道 EEG 信号。数据集中的 EEG trial 约为 11965 条，对应约 1996 张不同图像。EEG 经过降采样处理后为 64 通道、250 个时间采样点，形状为 $[64, 250]$。图像以 $224\times224$ 分辨率输入模型。
+本次课程设计采用 Thought2Text 数据集。该数据集从 6 名健康被试处采集得到，每名被试观看 40 个 ImageNet 类别下的自然图像，同步通过 128 通道 EEG 设备记录脑电信号。整个数据集中约有 11965 条 EEG trial，对应大约 1996 张不同的图像。经过降采样后，每条 EEG 数据的维度为 $[64, 250]$（64 通道，250 个时间点）。图像统一缩放到 $224\times224$ 作为模型输入。
 
-值得说明的是，Thought2Text 是一个 EEG-image 配对数据集，其原始标注形式为类别标签而非自然语言图像描述。这意味着该数据集更适合 EEG-image 类别语义学习，而非直接的 EEG-to-text 生成训练。本课程设计在类别标签基础上，使用预训练 BLIP-base 模型为各图像生成伪描述文本，作为后续生成式模型的训练目标。
+需要说明的是，Thought2Text 是一个 EEG 与图像配对的数据集，原始标注为类别标签而非自然语言描述，因此其直接用途是 EEG-image 类别语义学习。针对生成式任务的需求，我们借助预训练 BLIP-base 模型为每张图像生成伪描述文本，作为后续训练生成模型的目标。
 
-数据集的基本信息如表~\ref{tab:dataset} 所示。
+数据集概况见表~\ref{tab:dataset}。
 
 \begin{table}[htbp]
   \centering
@@ -31,21 +31,21 @@
 
 \subsection{数据预处理}
 
-数据预处理包括 EEG 处理、图像处理和文本处理三个环节。
+数据预处理分为 EEG 信号处理、图像处理和文本处理三个部分。
 
-\textbf{EEG 预处理}：原始 EEG 从 128 通道降采样到 64 通道，逐通道进行 z-score 标准化。所有 EEG trial 长度统一为 250 个采样点。为减少训练时的磁盘 I/O，将全部训练、验证和测试集的 EEG 数据预缓存为 numpy 数组格式，训练时直接从内存缓存加载。
+\textbf{EEG 预处理}：原始 128 通道 EEG 降采样为 64 通道，逐通道做 z-score 标准化。所有 trial 统一截取为 250 个采样点。为了减轻训练时的磁盘读取压力，我们将训练集、验证集和测试集的全部 EEG 数据预先存为 numpy 数组格式，训练过程中直接从内存加载。
 
-\textbf{图像处理}：统一使用 CLIP ViT-B/32 的预处理流程（Resize 到 $224\times224$、CenterCrop、ImageNet 标准化）。为降低计算开销，全量图像的 CLIP 视觉特征（pooled embedding 和 patch tokens）均预先计算并缓存为 float16 精度的 .npy 文件，训练时加载并转换为 bfloat16。
+\textbf{图像处理}：统一使用 CLIP ViT-B/32 的标准预处理流程（缩放到 $224\times224$、CenterCrop、ImageNet 标准化）。为了节省训练时的计算量，我们将所有图像的 CLIP 视觉特征（包括 pooled embedding 和 patch tokens）预先计算并以 float16 精度存为 .npy 文件，训练时读入再转成 bfloat16 使用。
 
-\textbf{文本处理}：为 40 个类别分别构造 prompt ``a photo of a \{class\_name\}''，通过冻结的 CLIP text encoder 得到 512 维文本原型向量，预计算后存储，训练和评估期间不再更新。
+\textbf{文本处理}：为 40 个类别分别构造 ``a photo of a \{class\_name\}'' 形式的 prompt，用冻结的 CLIP text encoder 提取 512 维文本原型向量，预计算后固定存储，训练和评估阶段不再更新。
 
-\textbf{视觉退化生成}：六种退化条件在数据加载过程中在线施加，不需要预存储退化图像。退化变换基于 torchvision 标准算子实现，在 DataLoader 的 worker 进程中执行。
+\textbf{视觉退化生成}：六种退化条件在数据加载时在线生成，不需要预先存储退化图像。退化操作基于 torchvision 的标准算子实现，在 DataLoader 的 worker 进程中执行。
 
 \subsection{数据划分}
 
-数据划分采用 image-level split 方案，即按照图像 ID 而非 trial ID 进行划分。这一方案的核心目的是防止信息泄漏：如果采用 trial-level split，同一张图像的不同 trial 可能散布在训练集和测试集中，模型可能依赖记忆图像视觉特征进行分类，而非学习利用 EEG 语义信息。image-level split 保证了训练集和测试集之间不存在共享图像。
+数据划分采用 image-level 方案，即按图像 ID 而非 trial ID 进行切分。这样设计的出发点是为了避免信息泄漏：如果按 trial 切分，同一张图像的不同 trial 可能分属训练集和测试集，模型有可能通过记忆图像本身的视觉特征来完成任务，而不是真正利用 EEG 中的语义信息。采用 image-level split 之后，训练集和测试集之间不存在共享图像。
 
-具体划分情况见表~\ref{tab:split}。验证集用于模型选择和早停判断，测试集仅用于最终评估。
+划分的具体数量详见表~\ref{tab:split}。验证集用于模型选择和早停判断，测试集只在最终评估时使用。
 
 \begin{table}[htbp]
   \centering
@@ -64,11 +64,11 @@
 
 \subsection{任务定义}
 
-本课程设计围绕两个核心任务展开。
+我们围绕两个核心任务展开实验。
 
-\textbf{任务一：EEG 辅助语义预测}。给定退化图像和对应的 EEG trial，模型输出对 40 个类别的预测概率分布。该任务的目标是验证真实配对 EEG 能否在视觉退化条件下提升对图像类别的判断能力。评估时设置 vision-only、real EEG、shuffled EEG、random EEG 和 eeg-only 五种输入模式。
+\textbf{任务一：EEG 辅助语义预测}。输入退化图像及对应的 EEG trial，模型输出 40 个类别上的概率分布。该任务旨在检验真实配对的 EEG 信号是否能在图像退化条件下帮助模型做出更准确的类别判断。评估阶段设置了五种输入模式：纯视觉（vision-only）、真实 EEG（real EEG）、shuffled EEG（打乱脑电）、随机 EEG（random EEG）和仅用 EEG（eeg-only）。
 
-\textbf{任务二：生成式图像描述}。给定退化图像和对应的 EEG trial，模型生成一段自然语言描述文本。该任务的目标是验证 EEG-enhanced 视觉表示能否使生成式视觉语言模型产生比纯视觉输入更准确的描述。评估设置 vision-only、real EEG、shuffled EEG 和 random EEG 四种模式。
+\textbf{任务二：生成式图像描述}。输入退化图像及对应的 EEG trial，模型生成对应的自然语言描述。该任务考察 EEG 增强后的视觉表示是否能让生成式视觉语言模型输出比纯视觉更准确的描述。评估阶段设置了四种模式：vision-only、real EEG、shuffled EEG 和 random EEG。
 
 \subsection{评价指标}
 

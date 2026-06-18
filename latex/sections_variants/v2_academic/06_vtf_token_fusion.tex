@@ -34,4 +34,4 @@ $\gamma$ 为可训练的缩放因子（初始化为 0.1），训练初期抑制 
 
 \subsection{分类验证}
 
-为验证 VTF 的有效性，首先在分类任务上进行评估：将 $F_{\mathrm{enhanced}}$ 平均池化后与 CLIP 文本原型进行零样本分类。实验结果表明，VTF 在多项退化条件下 real EEG 优于 vision-only 和 shuffled/random EEG 对照，验证了 token-level EEG fusion 的可行性。不过，VTF 的总体分类准确率仍显著低于 A2 的 pooled fusion，因为后者使用了更深的 gated fusion 网络和更充分的跨模态交互。VTF 的核心价值在于它产生的 enhanced vision tokens 可直接输入生成式 VLM，这是下一章的基础。
+为验证 VTF 的有效性，首先在分类任务上进行评估：将 $F_{\mathrm{enhanced}}$ 平均池化后与 CLIP 文本原型进行零样本分类。实验结果表明，VTF 在多项退化条件下 real EEG 优于 vision-only 和 shuffled（打乱脑电）/random EEG 对照，验证了 token-level EEG fusion 的可行性。不过，VTF 的总体分类准确率仍显著低于 A2 的 pooled fusion，因为后者使用了更深的 gated fusion 网络和更充分的跨模态交互。VTF 的核心价值在于它产生的 enhanced vision tokens 可直接输入生成式 VLM，这是下一章的基础。

@@ -1,10 +1,10 @@
 \section{工程实现与代码结构}
 
-本章介绍项目的工程实现情况，包括目录组织、核心模块和训练评估流程。
+这一章我们来讲项目的具体工程实现，包括代码怎么组织的、核心模块怎么分工的，以及训练和评估的完整流程。
 
 \subsection{项目目录结构}
 
-项目的代码采用模块化组织，核心目录如下：
+为了让代码便于维护和扩展，我们把整个项目按功能拆成了几个独立的目录，具体结构如下：
 
 \begin{lstlisting}[language=bash,caption={项目目录结构}]
 project_root/
@@ -23,7 +23,7 @@ project_root/
 
 \subsection{核心模块说明}
 
-表~\ref{tab:code-modules} 列出了主要模块及其功能。
+下面我们用表~\ref{tab:code-modules} 把几个重要模块的功能梳理一下。
 
 \begin{table}[htbp]
   \centering
@@ -48,10 +48,10 @@ project_root/
 
 \subsection{训练与评估流程}
 
-\textbf{训练流程}：(1) 数据准备——构建 JSONL manifest，生成 CLIP 特征缓存；(2) A2 EEG encoder 对齐训练（可选）——使用 InfoNCE 对比损失将 EEG 映射到 CLIP 空间；(3) A2 语义融合训练——联合训练 fusion + classification 模块；(4) VTF token 融合训练；(5) 生成式模型训练——Qwen2-VL + LoRA；(6) 全量测试——所有退化条件 $\times$ EEG 模式的组合评估。
+\textbf{训练流程}大致分六个步骤：(1) 先做数据准备——构建 JSONL manifest，然后生成 CLIP 特征缓存；(2) 可选阶段，做 A2 EEG encoder 的对齐训练——用 InfoNCE 对比损失把 EEG 特征映射到 CLIP 空间；(3) A2 语义融合训练——把 fusion 和 classification 模块放在一起联合训练；(4) VTF token 融合训练；(5) 生成式模型训练——这里用的是 Qwen2-VL + LoRA；(6) 最后做全量测试——把所有退化条件 $\times$ EEG 模式的组合都跑一遍。
 
-\textbf{输出文件}：每次训练在 \texttt{outputs/<run\_name>/} 下生成最佳 checkpoint、训练日志、metrics JSON 和 report. 生成式评估产出 JSONL 文件，每条记录包含 image\_id、mode、reference、prediction 字段。
+\textbf{输出文件}方面，每次训练的结果都统一放在 \texttt{outputs/<run\_name>/} 下面，包括最佳 checkpoint、训练日志、metrics JSON 和 report。生成式评估会输出 JSONL 格式的文件，每条记录里有 image\_id、mode、reference、prediction 这几个字段。
 
 \subsection{遇到的工程问题}
 
-在实际开发中遇到并解决了以下问题：(1) 增强视觉 token 的维度与 Qwen2-VL 的输入期望不完全匹配，需在 VTF 后插入本设计实现的轻量 prefix adapter 进行格式对齐和维度映射；(2) 部分 BLIP 伪 caption 存在重复、过长或与类别不一致的问题，通过最小长度过滤（$\geq$ 3 词）和正则去噪处理；(3) 全量测试涉及 1997 $\times$ 6 $\times$ 4 $\approx$ 48000 次推理，生成式模型的自回归解码是主要时间瓶颈，完整评估约需 2--4 小时；(4) 主要训练均在单张 48 GB GPU 上完成，未使用 DeepSpeed 或多 GPU 分布式训练。
+开发过程中我们碰到了一些实际问题，也逐一解决了：(1) 增强视觉 token 的维度跟 Qwen2-VL 的输入要求不完全对得上，所以我们自己在 VTF 后面加了一个轻量的 prefix adapter，专门做格式对齐和维度映射；(2) 部分 BLIP 生成的伪 caption 有重复、太长或者跟类别对不上的情况，我们通过最小长度过滤（$\geq$ 3 词）加正则去噪来处理；(3) 全量测试要跑 1997 $\times$ 6 $\times$ 4 $\approx$ 48000 次推理，生成式模型的自回归解码是最耗时的环节，完整跑一轮大概需要 2--4 小时；(4) 主要的训练任务都是在单张 48 GB GPU 上完成的，没有用 DeepSpeed 或者多 GPU 分布式训练。

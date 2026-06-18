@@ -4,9 +4,9 @@
 
 本课程设计围绕视觉退化条件下 EEG 辅助视觉语言模型的语义识别与图像描述生成任务，在 Thought2Text 数据集上完成了从方法设计、模型实现、训练调参到评估验证的完整实践。主要工作成果包括：
 
-\textbf{(1) 构建了视觉退化条件下 EEG 辅助语义识别的实验框架}。设置了六种退化条件（clean、lowres16、strong\_blur、strong\_noise、occlusion50、mixed）和五种 EEG 对照模式（real EEG、vision-only、shuffled EEG、random EEG、eeg-only），采用 image-level split 防止数据泄漏。
+\textbf{(1) 构建了视觉退化条件下 EEG 辅助语义识别的实验框架}。设置了六种退化条件（clean、lowres16、strong\_blur、strong\_noise、occlusion50、mixed）和五种 EEG 对照模式（real EEG、vision-only、shuffled EEG（打乱脑电）、random EEG、eeg-only），采用 image-level split 防止数据泄漏。
 
-\textbf{(2) 实现了 A2 时间-频谱-空间 EEG 语义融合模型}。在 CLIP 语义空间中通过三支路并行编码加门控残差融合，在本数据集和当前设置下，real EEG 在退化图像语义识别中表现出了高于 vision-only 和 shuffled/random EEG 对照组的性能。在 18/18 的 seed-condition 组合中，real EEG 均高于所有对照组。
+\textbf{(2) 实现了 A2 时间-频谱-空间 EEG 语义融合模型}。在 CLIP 语义空间中通过三支路并行编码加门控残差融合，在本数据集和当前设置下，real EEG 在退化图像语义识别中表现出了高于 vision-only 和 shuffled（打乱脑电）/random EEG 对照组的性能。在 18/18 的 seed-condition 组合中，real EEG 均高于所有对照组。
 
 \textbf{(3) 完成了 VTF token-level EEG 视觉特征增强}。将 EEG 信息从 pooled embedding 层推进到 visual token 层，为生成式视觉语言模型提供了可用的 EEG-enhanced 视觉输入。
 

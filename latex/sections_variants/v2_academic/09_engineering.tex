@@ -50,7 +50,7 @@ project_root/
 
 \textbf{训练流程}：(1) 数据准备——构建 JSONL manifest，生成 CLIP 特征缓存；(2) A2 EEG encoder 对齐训练（可选）——使用 InfoNCE 对比损失将 EEG 映射到 CLIP 空间；(3) A2 语义融合训练——联合训练 fusion + classification 模块；(4) VTF token 融合训练；(5) 生成式模型训练——Qwen2-VL + LoRA；(6) 全量测试——所有退化条件 $\times$ EEG 模式的组合评估。
 
-\textbf{输出文件}：每次训练在 \texttt{outputs/<run\_name>/} 下生成最佳 checkpoint、训练日志、metrics JSON 和 report. 生成式评估产出 JSONL 文件，每条记录包含 image\_id、mode、reference、prediction 字段。
+\textbf{输出文件}：每次训练在 \texttt{outputs/<run\_name>/} 下生成最佳 checkpoint、训练日志、metrics JSON 和 report。生成式评估产出 JSONL 文件，每条记录包含 image\_id、mode、reference、prediction 字段。
 
 \subsection{遇到的工程问题}
 

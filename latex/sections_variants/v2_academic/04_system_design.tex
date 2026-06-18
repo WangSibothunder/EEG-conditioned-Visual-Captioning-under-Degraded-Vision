@@ -8,7 +8,7 @@
 
 \textbf{第一阶段：CLIP 语义空间构建}。利用 CLIP 在大规模数据上预训练得到的图文对齐空间作为跨模态桥梁。将 40 类文本 prompt 通过 CLIP text encoder 预计算为固定文本原型，将全量图像通过 CLIP ViT 预缓存为视觉特征。这一阶段为后续所有 EEG-图像语义交互提供了统一的操作空间，避免在少量 EEG 数据上从头学习语义结构。
 
-\textbf{第二阶段：A2 EEG 语义融合}。设计并实现 A2 temporal-spectral-spatial EEG encoder，从 EEG 信号中提取时间、频谱和空间三方面的语义特征。在 CLIP 语义空间中，通过门控残差融合将 EEG embedding 与退化图像的视觉 embedding 进行融合，以分类损失为主训练目标，并设置 shuffled EEG 和 random EEG 两种对照，严格验证 EEG 语义信息的真实性。
+\textbf{第二阶段：A2 EEG 语义融合}。设计并实现 A2 temporal-spectral-spatial EEG encoder，从 EEG 信号中提取时间、频谱和空间三方面的语义特征。在 CLIP 语义空间中，通过门控残差融合将 EEG embedding 与退化图像的视觉 embedding 进行融合，以分类损失为主训练目标，并设置 shuffled EEG（打乱脑电）和 random EEG 两种对照，严格验证 EEG 语义信息的真实性。
 
 \textbf{第三阶段：token-level EEG 视觉增强}。第二阶段的融合发生在 pooled embedding 层——整个图像的视觉信息被压缩为单一向量。为使 EEG 信息能够进入生成式 VLM 的 token 处理流程，本阶段设计 VTF 模块，在 CLIP ViT 的 visual patch token 层面注入 EEG token，通过 cross-attention 生成 EEG-enhanced vision tokens。
 

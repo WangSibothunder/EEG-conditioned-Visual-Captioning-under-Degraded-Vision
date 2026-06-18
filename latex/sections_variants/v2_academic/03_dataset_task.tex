@@ -4,9 +4,9 @@
 
 \subsection{数据集介绍}
 
-本课程设计使用 Thought2Text 数据集。该数据集由 6 名健康被试参与，每位被试观看了 40 个 ImageNet 类别的自然图像，在观看过程中同步采集 128 通道 EEG 信号。数据集中的 EEG trial 约为 11965 条，对应约 1996 张不同图像。EEG 经过降采样处理后为 64 通道、250 个时间采样点，形状为 $[64, 250]$。图像以 $224\times224$ 分辨率输入模型。
+本课程设计采用 Thought2Text 数据集。该数据集由 6 名健康被试参与，每位被试观看了 40 个 ImageNet 类别的自然图像，在观看过程中同步采集 128 通道 EEG 信号。数据集中的 EEG trial 总数为约 11965 条，对应约 1996 张不同图像。EEG 经过降采样处理后为 64 通道、250 个时间采样点，形状为 $[64, 250]$。图像以 $224\times224$ 分辨率输入模型。
 
-值得说明的是，Thought2Text 是一个 EEG-image 配对数据集，其原始标注形式为类别标签而非自然语言图像描述。这意味着该数据集更适合 EEG-image 类别语义学习，而非直接的 EEG-to-text 生成训练。本课程设计在类别标签基础上，使用预训练 BLIP-base 模型为各图像生成伪描述文本，作为后续生成式模型的训练目标。
+需要说明的是，Thought2Text 是一个 EEG-image 配对数据集，其原始标注形式为类别标签而非自然语言图像描述。这意味着该数据集更适合 EEG-image 类别语义学习，而非直接的 EEG-to-text 生成训练。本课程设计在类别标签基础上，使用预训练 BLIP-base 模型为各图像生成伪描述文本，作为后续生成式模型的训练目标。
 
 数据集的基本信息如表~\ref{tab:dataset} 所示。
 
@@ -37,7 +37,7 @@
 
 \textbf{图像处理}：统一使用 CLIP ViT-B/32 的预处理流程（Resize 到 $224\times224$、CenterCrop、ImageNet 标准化）。为降低计算开销，全量图像的 CLIP 视觉特征（pooled embedding 和 patch tokens）均预先计算并缓存为 float16 精度的 .npy 文件，训练时加载并转换为 bfloat16。
 
-\textbf{文本处理}：为 40 个类别分别构造 prompt ``a photo of a \{class\_name\}''，通过冻结的 CLIP text encoder 得到 512 维文本原型向量，预计算后存储，训练和评估期间不再更新。
+\textbf{文本处理}：为 40 个类别分别构造 prompt "a photo of a \{class\_name\}"，通过冻结的 CLIP text encoder 得到 512 维文本原型向量，预计算后存储，训练和评估期间不再更新。
 
 \textbf{视觉退化生成}：六种退化条件在数据加载过程中在线施加，不需要预存储退化图像。退化变换基于 torchvision 标准算子实现，在 DataLoader 的 worker 进程中执行。
 
@@ -66,9 +66,9 @@
 
 本课程设计围绕两个核心任务展开。
 
-\textbf{任务一：EEG 辅助语义预测}。给定退化图像和对应的 EEG trial，模型输出对 40 个类别的预测概率分布。该任务的目标是验证真实配对 EEG 能否在视觉退化条件下提升对图像类别的判断能力。评估时设置 vision-only、real EEG、shuffled EEG、random EEG 和 eeg-only 五种输入模式。
+\textbf{任务一：EEG 辅助语义预测}。给定退化图像和对应的 EEG trial，模型输出对 40 个类别的预测概率分布。该任务的目标是验证真实配对 EEG 能否在视觉退化条件下提升对图像类别的判断能力。评估时设置 vision-only、real EEG、shuffled EEG（打乱脑电）、random EEG 和 eeg-only 五种输入模式。
 
-\textbf{任务二：生成式图像描述}。给定退化图像和对应的 EEG trial，模型生成一段自然语言描述文本。该任务的目标是验证 EEG-enhanced 视觉表示能否使生成式视觉语言模型产生比纯视觉输入更准确的描述。评估设置 vision-only、real EEG、shuffled EEG 和 random EEG 四种模式。
+\textbf{任务二：生成式图像描述}。给定退化图像和对应的 EEG trial，模型生成一段自然语言描述文本。该任务的目标是验证 EEG-enhanced 视觉表示能否使生成式视觉语言模型产生比纯视觉输入更准确的描述。评估设置 vision-only、real EEG、shuffled EEG（打乱脑电）和 random EEG 四种模式。
 
 \subsection{评价指标}
 
@@ -79,7 +79,7 @@
   \item \textbf{Top-5 Accuracy}：真实类别位于预测前 5 类别中的比例；
   \item \textbf{Class Hit}：通过 CLIP 文本原型相似度进行零样本类别判定，命中真实类别的比率；
   \item \textbf{Real-Vision Gap}：real EEG 与 vision-only 的指标差值，正值表示 EEG 提供了正向辅助；
-  \item \textbf{Real-Shuffled/Random Gap}：real EEG 与 shuffled/random EEG 的差值，是判断 EEG 效果是否来自真实配对的关键对照指标；
+  \item \textbf{Real-Shuffled/Random Gap}：real EEG 与 shuffled（打乱脑电）/random EEG 的差值，是判断 EEG 效果是否来自真实配对的关键对照指标；
   \item \textbf{Win Rate}：在多种退化条件或随机种子中，real EEG 超过对照组的比例。
 \end{itemize}
 
