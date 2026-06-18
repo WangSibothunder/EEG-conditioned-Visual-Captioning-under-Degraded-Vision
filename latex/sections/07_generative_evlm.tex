@@ -1,90 +1,56 @@
-\section{生成式 EVLM 设计}
+\section{生成式视觉语言模型设计}
 
-本章描述本文生成式 EVLM 的设计与实现. 在 A2 建立了 quantitative semantic prediction baseline 且 VTF 构建了 token-level EEG-enhanced vision tokens 之后, 本章将 EEG-enhanced vision tokens 输入预训练生成式 VLM, 实现从 EEG 信号到自由自然语言 caption 的完整生成通路.
+在语义分类任务验证了 EEG 辅助效果之后，本章将 EEG-enhanced vision tokens 接入生成式视觉语言模型，实现从退化图像和 EEG 到自然语言描述的生成通路。
 
-\subsection{生成式 EVLM 的设计目标}
+\subsection{生成式描述任务的设计目标}
 
-生成式 EVLM 的设计目标不是从 EEG 直接生成任意文本（``EEG-to-text''）, 而是: 给定一幅退化图像和对应的 EEG trial, 利用 EEG-enhanced vision tokens 作为视觉输入, 通过预训练生成式 VLM 生成关于图像内容的自然语言描述. 核心假设是: EEG-enhanced vision tokens 比纯视觉（vision-only）tokens 在退化条件下携带更准确的语义信息, 因此生成的 caption 应该具有更高的类别命中率.
+生成式描述任务的目标是：给定一幅退化图像和配对的 EEG trial，模型生成一段自然语言 caption 描述图像内容。与第 5 章的语义分类任务不同，这里期望模型输出的不是固定的类别标签，而是自由形式的描述文本。
 
-\subsection{早期生成尝试与问题}
-
-在项目初期（Day3 阶段）, 本文尝试了最简单直接的生成方案: 将 CLIP/EEG pooled embedding 通过 soft prompt projector（线性投影）映射为 $K=8$ 个软提示 token, 拼接在 Qwen2.5-1.5B-Instruct 的输入序列前部, 冻结语言模型仅训练投影器. 这种 soft prompt captioning 方案在 dummy data 上成功运行, 但当迁移到 real Thought2Text 数据时遇到了严重问题:
-
-\begin{itemize}
-  \item 模型生成大量 URL-like 文本（如 ``http://...''形式的字符串）;
-  \item 生成 ImageNet wnid 代码（如 ``n04069434''）而非自然语言描述;
-  \item 生成代码片段和不可读的 token 序列;
-  \item 在退化条件下 caption 质量极低, 有效输出率不足 30\%.
-\end{itemize}
-
-这些问题的根源在于: (1) Qwen2.5 的训练数据中包含大量 URL 和代码, soft prompt 的训练信号不足以引导其生成自然的图像描述; (2) 仅 8 个软提示 token 的容量太小, 难以编码足够的视觉语义信息; (3) Qwen2.5 本身是纯文本 LLM, 未经过视觉-语言对齐训练, 不具备根据视觉特征生成描述的能力.
-
-基于这些教训, 本文转向两条改进方向: (1) 使用原生视觉语言模型（Qwen2-VL）替代纯文本 LLM, 因为 Qwen2-VL 已经经过图文对齐预训练, 理解如何处理 visual tokens; (2) 增强视觉 tokens 的语义质量（通过 A2/VTF）, 而不是直接使用 CLIP pooled embedding.
+需要说明的是，该任务的定位并不是``从脑电直接读取任意语言''。本课程设计在约 40 类、12000 条 trial 的数据规模下，目标是将 EEG 作为视觉语义增强信号，利用 EEG 携带的关于图像内容的额外神经表征，辅助生成式视觉语言模型在退化条件下产生比纯视觉输入更准确的描述。
 
 \subsection{轻量 GRU Caption Decoder Baseline}
 
-在正式引入 Qwen2-VL 之前, 本文先实现了一个轻量级的 GRU-based autoregressive caption decoder 作为生成式 baseline. 该 decoder 以 EEG-enhanced vision tokens 的平均池化向量为初始隐状态, 使用单层 GRU 逐步解码文本 token. Model 参数量约 2.8M, 在 BLIP pseudo-caption 上进行训练.
+在接入大型生成式模型之前，先实现了一个轻量级的 GRU-based autoregressive caption decoder 作为生成基线。该 decoder 以 VTF 输出的 enhanced vision tokens 的平均池化向量为初始隐状态，使用单层 GRU 逐步解码文本 token。模型参数量约为 2.8M，在 BLIP 伪 caption 上训练。
 
-GRU baseline 能够生成 free-form caption, 其优势在于: 训练极快、不依赖大型预训练模型、输出始终为自然长度文本. 但 GRU decoder 不是预训练 VLM, 缺乏丰富的语言先验知识, 生成的 caption 在语法自然度和语义准确性上明显弱于 Qwen2-VL. GRU baseline 的主要价值在于验证 EEG-enhanced vision tokens 确实可以驱动 autoregressive caption 生成, 并作为后续 Qwen2-VL 结果的参照下界.
+GRU baseline 能够稳定生成 free-form caption，其优点是训练快速、不需要大型预训练模型、输出始终为自然长度文本。但 GRU decoder 缺乏丰富的语言先验知识，生成描述的语法自然度和概念准确性明显弱于预训练视觉语言模型。GRU baseline 的主要价值在于验证 EEG-enhanced vision tokens 可以驱动自回归 caption 生成。
 
-\subsection{预训练生成式模型路线探索}
+\subsection{预训练生成模型方案比较}
 
-在 GRU baseline 之上, 本文系统探索了五条生成式路线, 汇总于表~\ref{tab:route-comparison}.
+为确定最优生成方案，分别尝试了五种技术路线，汇总于表~\ref{tab:route-comparison}。为便于记录，在实验阶段使用代号标记各方案。
 
-\begin{table}[H]
+\begin{table}[htbp]
   \centering
-  \caption{生成式 EVLM 路线对比}
+  \caption{生成式视觉语言模型方案对比}
   \label{tab:route-comparison}
-  \begin{tabularx}{\linewidth}{l l l X}
+  \begin{tabularx}{\linewidth}{l l X}
     \toprule
-    路线 & 输入形式 & 桥接模块 & 结论 \\
+    方案代号 & 输入与桥接方式 & 主要发现 \\
     \midrule
-    Route1 & enhanced tokens 池化后投影为 inputs\_embeds & 线性投影 + LoRA & 有效输出率低, 生成质量不稳定 \\
-    Route2 & Q-Former/Perceiver bridge & Cross-attention bridge & 实现了但效果一般, 依赖更大的训练资源 \\
-    Route3 & LLaVA-style mm\_projector & MLP 投影 & 工程兼容性较难, 被放弃 \\
-    Route4 & BLIP-2/Q-Former style & Q-Former & 有一定效果, 但不如预期 \\
-    Route5 & enhanced tokens + Qwen2-VL adapter & Prefix/Adapter + LoRA & 最终最佳生成路线 \\
+    方案一 & enhanced tokens 池化后投影为 inputs\_embeds，输入 Qwen2.5 + LoRA & 纯文本 LLM 缺乏视觉-语言对齐能力，有效输出率低 \\
+    方案二 & Q-Former/Perceiver bridge 桥接视觉与语言 & 在小样本条件下效果有限，需要更大的训练数据 \\
+    方案三 & LLaVA-style MLP projector & 与 Qwen2-VL adapter 的工程兼容性不佳 \\
+    方案四 & BLIP-2 style Q-Former & 清洁图像上表现尚可，退化条件下不稳定 \\
+    方案五 & enhanced tokens + Qwen2-VL adapter/prefix + LoRA & 最终采用的生成方案 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-Routes 1-4 的详细结果在第 8 章给出. 概括而言: Route1（Qwen2.5 inputs\_embeds + LoRA）有效输出率低; Route2（Q-Former bridge）需要更大的训练数据和显存, 在当前小样本条件下不如 Route5; Route3（LLaVA projector）与 Qwen2-VL 的兼容性存在工程问题; Route4（BLIP-2 style）在 clean 图像上表现尚可但退化条件下不稳定.
+经综合比较，方案五（Qwen2-VL adapter）在有效输出率、caption class-hit 和 real-control gap 上均优于前四种方案。Qwen2-VL 作为原生视觉语言模型，其视觉编码模块在预训练阶段已与语言模型进行了充分的图文对齐，因此在小样本微调场景下能更好地利用 EEG-enhanced visual tokens。
 
-\subsection{Route5 Qwen2-VL 最终生成式架构}
+\subsection{基于 Qwen2-VL 的最终生成方案}
 
-Route5 是本文最终选定的生成式 EVLM 架构, 其结构如图~\ref{fig:route5} 所示.
+最终采用的生成方案结构如图~\ref{fig:route5} 所示。
 
-\placeholderfigure{Route5 Qwen2-VL generative EVLM 架构图}{route5-qwenvl-placeholder}{5.0cm}
+\placeholderfigure{基于 Qwen2-VL 的生成式视觉语言模型架构图}{route5-qwenvl-placeholder}{5.0cm}
 
-Route5 的核心设计如下:
+核心工作流程如下：(1) 退化图像经 CLIP ViT 得到 visual tokens，与 EEG tokens 经 VTF cross-attention 融合得到 enhanced vision tokens；(2) enhanced vision tokens 通过 Qwen2-VL 内置的 vision-language adapter 进行维度对齐，映射到 LLM 的 embedding space；(3) 在输入中附加语义提示信息（A2 预测的最可能类别）和退化类型标签，以文本 token 形式插入生成 prompt；(4) Qwen2-VL-2B-Instruct 解码器在 teacher-forcing 模式下进行自回归训练，测试时以 ``corruption\_type:'' 为前缀触发生成。
 
-\textbf{视觉输入}: 退化图像经 CLIP ViT 后得到 visual tokens $F_{\mathrm{vis}}\in\mathbb{R}^{B\times50\times512}$, 经过 VTF 与 EEG tokens 融合后得到 enhanced vision tokens $F_{\mathrm{enhanced}}\in\mathbb{R}^{B\times50\times512}$.
+\subsection{LoRA 微调与训练配置}
 
-\textbf{桥接模块}: 增强视觉 tokens 通过 Qwen2-VL 内置的 vision-language adapter 进行维度对齐. Qwen2-VL 的 adapter 是一个预训练的 MLP projector, 将 ViT 输出映射到 LLM 的 embedding space.
+生成式模型使用 LoRA 在 Qwen2-VL 的 Query 和 Value 投影矩阵上施加低秩适配，秩 $r=8$，缩放因子 $\alpha=16$。可训练参数约 1.3M，远小于模型总参数量。训练时冻结所有原始模型权重。实验还对比了 $r=16$ 的配置。
 
-\textbf{语义提示与退化类型信息}: 为了帮助模型进行受控生成, 在 input 中附加了 semantic top-$k$ prompt（由 A2 预测的最可能类别信息）和 corruption type label. 这些辅助信息以文本 token 形式插入生成 prompt 中.
+在训练目标方面，测试了两种策略：(1) 类别名称为目标——直接以类别正确性为优化目标；(2) 类别名称 + BLIP 伪 caption 为目标——生成文本更自然但 BLIP 伪 caption 中的噪声可能影响类别准确性。实验发现前者在 class-hit 上更优，后者在文本自然度上更佳。最终报告以后者为主展示生成效果。
 
-\textbf{生成模型}: 使用 Qwen2-VL-2B-Instruct 作为生成 backbone. 该模型已经在大规模图文数据上进行过预训练, 具有视觉-语言理解和对齐能力. 模型参数约 2B, 单 GPU 可运行.
+\subsection{Best-of-N Reranking}
 
-\textbf{LoRA 微调}: 在 Qwen2-VL 的注意力投影矩阵（Query 和 Value）上施加 LoRA, 秩 $r=8$. 可训练的 LoRA 参数数量仅约 1.3M, 远小于模型总参数量. 冻结所有原始模型权重, 仅训练 LoRA 适配器和 VTF cross-attention 模块.
-
-\textbf{训练目标}: caption 训练使用 teacher-forcing 的自回归交叉熵损失. 目标序列为 ``corruption\_type: \{class\_name\}: caption'', 其中 caption 为 BLIP 伪 caption 或类别名（根据 target strategy）.
-
-\textbf{推理}: 测试时, 以 ``corruption\_type:'' 为前缀触发生成, 模型自回归解码直到结束 token 或最大长度.
-
-\subsection{LoRA 配置、Caption Target 消融与 Reranking}
-
-\textbf{LoRA 秩选择}: 实验对比了 $r=8$ 和 $r=16$ 两种配置. 结果（第 8 章）表明 $r=8$ 在 valid caption rate 和 class-hit 上均优于 $r=16$. 推测原因是: 小样本条件下, 过大的可训练参数秩导致过拟合, $r=8$ 的低秩约束起到了隐式正则化的作用.
-
-\textbf{Caption Target 策略}: 实验对比了两种训练目标配置:
-\begin{itemize}
-  \item \textbf{T1 (class-only)}: caption 仅包含类别名称, 目标序列为 ``\{class\_name\}''. 该策略直接以类别正确性为优化目标, 有利于 class-hit 提升;
-  \item \textbf{T3 (class+BLIP)}: caption 包含类别名和 BLIP 生成的伪 caption, 目标序列为 ``\{class\_name\}: \{BLIP caption\}''. 该策略使生成文本更自然, 但 BLIP 伪 caption 中的噪声可能降低 class-hit.
-\end{itemize}
-T1 在 class-hit 上效果更好, T3 在生成文本的自然度上更优. 最终报告以 T3 为主展示生成效果.
-
-\textbf{Best-of-N Reranking}: 推理时对每个输入生成 $N=5$ 个候选 caption（通过调整温度参数）, 从候选中选取 CLIP text prototype 分类命中最高的 caption 作为最终输出. Reranking 显著提升了 valid caption rate 和展示效果质量, 在 qualitative examples 中效果尤为明显.
-
-\subsection{Route5 的定位}
-
-需要再次强调: Route5 是本文构建的\textbf{生成式 EVLM 原型}, 不是自称的 ``EEG-to-text'' 系统. 它的主要贡献在于证明了: 在小样本 EEG-image 数据条件下, 将 EEG-enhanced vision tokens 注入预训练 Qwen2-VL 可以产生比纯视觉输入更准确的 free-form caption 生成. 然而, A2 在 quantitative classification 上的性能仍然远强于 Route5 的生成式结果, 说明在小样本条件下 constrained prediction 比 free-form generation 更可靠.
+推理时为每个输入生成 $N=5$ 个候选 caption（通过调整温度参数、top-p 等解码策略），利用 CLIP text encoder 计算各候选项与 40 类文本原型的余弦相似度，选取 class hit 最高的候选项作为最终输出。Reranking 在不修改模型参数的情况下显著提升了有效输出率和定性展示效果。
